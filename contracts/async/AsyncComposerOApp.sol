@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.28;
 
 import {OApp, Origin} from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
 import {AsyncOps, AsyncCodec} from "./AsyncCodec.sol";

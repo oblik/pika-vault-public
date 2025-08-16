@@ -63,7 +63,6 @@ const deploy: DeployFunction = async (hre) => {
             `Deployed contract: ${DEPLOYMENT_CONFIG.share.contract}, network: ${hre.network.name}, address: ${shareOFT.address}`
         )
     }
-
     // Deploy Vault Chain Components (vault, adapter, composer)
     if (isVaultChain(networkEid)) {
         // 🎯 Get asset address (existing or deployed)
@@ -79,13 +78,18 @@ const deploy: DeployFunction = async (hre) => {
             console.log(`Using deployed asset address: ${assetOFTAddress}`)
         }
 
+
+console.log("assetOFTAddress", assetOFTAddress)
+console.log("DEPLOYMENT_CONFIG.vault.contracts.vault", DEPLOYMENT_CONFIG.vault.contracts.vault)
+console.log("test1");
         // Deploy ERC4626 Vault
         const vault = await deployments.deploy(DEPLOYMENT_CONFIG.vault.contracts.vault, {
             from: deployer,
-            args: [DEPLOYMENT_CONFIG.share.metadata.name, DEPLOYMENT_CONFIG.share.metadata.symbol, assetOFTAddress],
+            args: [assetOFTAddress,DEPLOYMENT_CONFIG.share.metadata.name, DEPLOYMENT_CONFIG.share.metadata.symbol],
             log: true,
             skipIfAlreadyDeployed: true,
         })
+        console.log("test2");
         console.log(
             `Deployed contract: ${DEPLOYMENT_CONFIG.vault.contracts.vault}, network: ${hre.network.name}, address: ${vault.address}`
         )
@@ -101,20 +105,27 @@ const deploy: DeployFunction = async (hre) => {
             `Deployed contract: ${DEPLOYMENT_CONFIG.vault.contracts.shareAdapter}, network: ${hre.network.name}, address: ${shareAdapter.address}`
         )
 
-        // Deploy OVault Composer
-        const composer = await deployments.deploy(DEPLOYMENT_CONFIG.vault.contracts.composer, {
-            from: deployer,
-            args: [vault.address, assetOFTAddress, shareAdapter.address],
-            log: true,
-            skipIfAlreadyDeployed: true,
-        })
-        console.log(
-            `Deployed contract: ${DEPLOYMENT_CONFIG.vault.contracts.composer}, network: ${hre.network.name}, address: ${composer.address}`
-        )
+        // Deploy OVault Composer (sync-composer) ONLY if we have an Asset OFT mesh on hub
+        // When using native USDC via CCTP on hub (assetAddress set), skip deploying composer
+        if (!DEPLOYMENT_CONFIG.vault.assetAddress) {
+            const composer = await deployments.deploy(DEPLOYMENT_CONFIG.vault.contracts.composer, {
+                from: deployer,
+                args: [vault.address, assetOFTAddress, shareAdapter.address],
+                log: true,
+                skipIfAlreadyDeployed: true,
+            })
+            console.log(
+                `Deployed contract: ${DEPLOYMENT_CONFIG.vault.contracts.composer}, network: ${hre.network.name}, address: ${composer.address}`
+            )
+            deployedContracts.composer = composer.address
+        } else {
+            console.log(
+                `Skipping ${DEPLOYMENT_CONFIG.vault.contracts.composer} on ${hre.network.name}: assetAddress set (USDC via CCTP on hub)`
+            )
+        }
 
         deployedContracts.vault = vault.address
         deployedContracts.shareAdapter = shareAdapter.address
-        deployedContracts.composer = composer.address
     }
 
     console.log(`Deployment complete on ${hre.network.name}`)

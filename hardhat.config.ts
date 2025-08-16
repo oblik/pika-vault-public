@@ -44,7 +44,7 @@ const config: HardhatUserConfig = {
     solidity: {
         compilers: [
             {
-                version: '0.8.22',
+                version: '0.8.28',
                 settings: {
                     optimizer: {
                         enabled: true,
@@ -68,6 +68,11 @@ const config: HardhatUserConfig = {
         arbitrum: {
             eid: EndpointId.ARBSEP_V2_TESTNET,
             url: process.env.RPC_URL_ARBITRUM_TESTNET || 'https://arbitrum-sepolia.gateway.tenderly.co',
+            accounts,
+        },
+        sepolia: {
+            eid: EndpointId.SEPOLIA_V2_TESTNET,
+            url: process.env.RPC_URL_SEPOLIA_TESTNET || 'https://sepolia.gateway.tenderly.co',
             accounts,
         },
         hardhat: {
