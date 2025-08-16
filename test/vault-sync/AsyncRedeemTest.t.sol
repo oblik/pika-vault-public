@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {OVault4626AsyncRedeem, IAssetOFT} from "../../contracts/OVault4626AsyncRedeem.sol";
-import {ComposerAsync, SpokeRedeemRouter} from "../../contracts/ComposerAsync.sol";
+import {ComposerAsync, SpokeRedeemRouter} from "../../contracts/mocks/ComposerAsync.sol";
 
 contract MockUSDC is ERC20("MockUSDC","mUSDC") {
     constructor() {}

@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 library AsyncOps {
     uint8 constant OP_REQUEST_REDEEM    = 0xA1;
     uint8 constant OP_CLAIM_SEND_ASSETS = 0xA2;
+    uint8 constant OP_CLAIM_SEND_USDC_CCTP = 0xA3;
 }
 
 library AsyncCodec {
@@ -22,4 +23,34 @@ library AsyncCodec {
     function decClaim(bytes memory p)
         internal pure returns (address controller, address receiver, uint256 shares, uint32 dstEid, uint256 minAssets, bytes memory options)
     { return abi.decode(p, (address,address,uint256,uint32,uint256,bytes)); }
+
+    // CCTP (USDC Fast) claim payload encoding
+    // Fields: controller, mintRecipient (receiver), shares, destDomain (CCTP), maxFee, minFinality, destCaller, hookData, minAssets
+    function encClaimCCTP(
+        address controller,
+        address mintRecipient,
+        uint256 shares,
+        uint32  destDomain,
+        uint256 maxFee,
+        uint32  minFinality,
+        address destCaller,
+        bytes memory hookData,
+        uint256 minAssets
+    ) internal pure returns (bytes memory) {
+        return abi.encode(controller, mintRecipient, shares, destDomain, maxFee, minFinality, destCaller, hookData, minAssets);
+    }
+
+    function decClaimCCTP(bytes memory p)
+        internal pure returns (
+            address controller,
+            address mintRecipient,
+            uint256 shares,
+            uint32  destDomain,
+            uint256 maxFee,
+            uint32  minFinality,
+            address destCaller,
+            bytes memory hookData,
+            uint256 minAssets
+        )
+    { return abi.decode(p, (address,address,uint256,uint32,uint256,uint32,address,bytes,uint256)); }
 }
