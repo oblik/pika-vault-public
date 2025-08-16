@@ -233,3 +233,23 @@ DEPLOYER_PK=
 Notes
 - CCIP is separate from value transfer; you can fetch/display `lastNAV` via the `NavReceiver` address on destination.
 - For OFT sends, estimate fees with the OFT `quoteSend`; for CCIP, use `router.getFee`; for CCTP Fast, account for `maxFee` and finality.
+
+## Deployed addresses (testnets)
+
+- Base Sepolia (hub)
+  - Vault (OVault4626AsyncRedeem): `0x81A7A4Ece4D161e720ec602Ad152a7026B82448b`
+  - Share Adapter (MyShareOFTAdapter): `0x6Df71536c389d09E9175ea9585f7DCD1A95B29d3`
+  - AsyncComposerOApp (hub): `0xCD771B830C1775308e8EE5B8F582f3956054041c`
+  - CCTP Bridger (Base): `0x42Ffc8306c022Dd17f09daD0FF71f7313Df0A48D`
+  - CctpDepositReceiver: `0x138108cB4Ae27856d292D52205BBC530A4A4E229`
+  - NAV Receiver: `0x77e424Dab916412C04eBe6B8c0435B3202f4C81B`
+
+- Arbitrum Sepolia (spoke)
+  - Share OFT (MyShareOFT): `0x6Df71536c389d09E9175ea9585f7DCD1A95B29d3`
+  - SpokeRedeemOApp: `0xC91A582E0FB8f2DbFe1309B3f578876564Bd7Ee0`
+  - NAV Pusher: `0x77e424Dab916412C04eBe6B8c0435B3202f4C81B`
+  - CCTP Bridger (Arb): `0x81A7A4Ece4D161e720ec602Ad152a7026B82448b`
+
+- Ethereum Sepolia (spoke)
+  - Share OFT (MyShareOFT): `0xACF7C2898bF9397AE1453aB98400763FeA2296A3`
+  - SpokeRedeemOApp: `0xEBa7Ee4c64a91B5dDb4631a66E541299f978fdd0`
