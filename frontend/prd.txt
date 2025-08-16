@@ -1,0 +1,480 @@
+Here is a focused, v1 Product Requirements Doc for the frontend that matches your README and the answers you gave. It is scoped for a two-person team and a hackathon deadline. No fluff, only what you need to ship a credible demo.
+
+# 0) Ground rules distilled from your README
+
+* ERC-4626 vault at the hub with sync deposits and async redemptions
+* Spokes are LayerZero OApps that forward requests to the hub
+* Shares are OFT on spokes, hub uses a share adapter lockbox
+* Value movement can be OFT for the underlying or CCTP v2 for native USDC
+* CCIP is control plane only for NAV broadcast
+* No separate Activity page. Pending is shown on the dashboard
+* USD valuation on the dashboard uses CDP Data balances only. Vault value calcs come later
+* No share transfer UI
+
+# 1) App goals
+
+Let a user:
+
+* create an embedded Coinbase wallet
+* onramp USDC
+* view wallet balances and positions
+* browse available vaults
+* deposit into a selected vault
+* request redeem and later claim to any destination chain
+* see a transparent step log for each operation with explorer links
+
+# 2) Tech stack and constraints
+
+* Next.js App Router + TypeScript
+* TailwindCSS
+* React Query for data
+* Coinbase Embedded Wallets
+* Coinbase Onramp with server minted session tokens
+* CDP Data APIs for wallet balances
+* Direct onchain reads for vault metadata, last NAV, request status
+* No secrets in the client
+
+# 3) Routes
+
+```
+/                      redirects to /dashboard
+/dashboard             balances, positions, pending requests, onramp entry
+/vaults                vault catalog
+/vaults/[vaultId]      vault detail with buy and sell tabs
+/onramp                dedicated onramp page
+
+/api/cdp/session       POST - mint onramp session token
+/api/cdp/balances      GET  - wallet token balances per chain
+/api/ops/[requestId]   GET  - merged status for a single request
+```
+
+# 4) Global UX rules
+
+* Every cross chain action shows a step log with links for both control and value planes
+* Never fake previews for async flows
+* Plain language about sync vs async
+* Hard error if needed data is missing or stale
+* Numbers always fixed decimals, locale aware
+
+# 5) Data sources
+
+Onchain contracts you will read:
+
+* Hub vault: `OVault4626AsyncRedeem`
+
+  * Functions: `asset()`, `totalAssets()`, `totalSupply()`, `previewDeposit()`, `lastNav()` if exposed, per controller queues if exposed
+* Hub composer OApp: recent request events and claim events
+* Spoke OApps: per user request events, claim events
+* OFT share on spokes: balance for positions
+* CCIP NAV receiver on destination chains: `lastNAV` for display only
+
+Offchain:
+
+* CDP Data API for wallet token balances on supported chains
+
+# 6) Page specs
+
+## 6.1 Wallet create and connect
+
+* If no embedded wallet exists, show a single Create wallet button
+* After success, show the address and chain selector
+
+**Acceptance**
+
+* Create wallet shows an address within a few seconds or an allowlist error
+
+## 6.2 Dashboard
+
+Sections:
+
+* Balance card
+
+  * Total wallet value in USDC using CDP Data only
+  * Per chain list with token rows
+* Positions
+
+  * For each vault where user holds shares on any spoke, show: vault name, total shares, rough value placeholder (we use last NAV later), link to detail
+* Pending requests
+
+  * Table keyed by `requestId`
+  * Columns: type (deposit or redeem), origin chain, dest chain, status, last event, LZ link, CCTP link if any
+  * Poll every 5 seconds
+
+Primary CTA:
+
+* Deposit funds button that routes to `/onramp`
+
+## 6.3 Vault catalog
+
+* Grid of vault cards with: name, description, base asset, chains involved, a small sparkline if you have data, View button
+* Optional dropdown to filter the composition tab later. No hard filter on this page
+
+Data:
+
+* Static list for v1 or a simple API that reads from your deployment registry
+
+## 6.4 Vault detail
+
+Header:
+
+* Name, icon, short description
+* Current share token address per chain
+* NAV per share if available from hub or CCIP receiver
+
+Main left:
+
+* Chart tabs
+
+  * NAV tab: time series if you have it, else show last NAV and a placeholder
+  * Composition tab: stacked bars by chain and asset if you have it, else table only
+* Holdings table
+
+  * Columns: Chain, Asset, Quantity, Value, Last updated
+  * Source is your hub side reports. If not ready, hide Value and Last updated
+
+Right side trade panel:
+
+* Tabs: Buy, Sell
+* Buy
+
+  * Amount in underlying
+  * Origin chain selector
+  * Mode selector appears only if base is USDC: Standard (OFT) or Fast (CCTP)
+  * Async disclaimer for cross chain paths
+  * Submit creates a request and pushes it into Pending immediately with returned `requestId`
+* Sell
+
+  * Amount in shares
+  * Destination chain selector
+  * Two buttons:
+
+    * Request redeem
+    * Claim (only enabled when claimable)
+  * Async disclaimer
+
+Status drawer:
+
+* Collapsible drawer under the trade panel showing the step log for the most recent request on this vault
+
+## 6.5 Onramp
+
+* Show per chain USDC balances from CDP Data
+* Button opens Coinbase Onramp using a server minted session token tied to the selected chain and wallet address
+* After success, soft refresh balances and return to dashboard
+
+# 7) Frontend to contract mapping
+
+### Deposits - Standard (OFT)
+
+1. User selects origin chain and amount in underlying
+2. If origin is the hub chain:
+
+   * Call `vault.deposit(amount, receiver)`
+3. If origin is a spoke:
+
+   * Call underlying Asset OFT `send` with compose payload that targets your hub composer for `deposit`
+   * You will need the OFT `quoteSend` to show fee estimates
+
+Returned or emitted:
+
+* `requestId` from your composer path or local event index
+* LZ tx hash
+
+### Deposits - USDC Fast (CCTP v2)
+
+1. Call `SpokeRedeemOApp.depositUsdcFast(...)` with
+
+   * amountAssets
+   * destDomain
+   * depositReceiver
+   * maxFee > 0 to enable Fast
+   * minFinality (1000 for Fast, 2000 for Standard)
+   * hookData encoding `(receiver, shareDstEid, minShares, oftOptions)`
+2. Hub deposit receiver mints USDC, deposits into vault, then either transfers shares locally or sends OFT cross chain
+
+Captured for the log:
+
+* LZ message id if any
+* CCTP burn tx on source
+* CCTP mint tx on hub
+
+### Redeem - request then claim
+
+Request
+
+* On any chain where the user holds share OFT, call `SpokeRedeemOApp.requestRedeemOnSpoke(controller, shares)`
+* Spoke burns local share OFT
+* Spoke sends LZ `REQUEST_REDEEM` to hub
+* Hub enqueues request
+
+Claim - Asset delivery (OFT)
+
+* User calls `SpokeRedeemOApp.claimSendAssets(...)`
+* Hub finalizes and Asset OFT sends to destination
+
+Claim - USDC Fast delivery (CCTP v2)
+
+* User calls `SpokeRedeemOApp.claimSendUsdcFast(...)`
+* Hub finalizes and bridger does `depositForBurnWithHook` Fast
+* Destination treasury receives native USDC
+
+### NAV display
+
+* Read `lastNAV` from `NavReceiver` on destination chains if available
+* Do not use CCIP for anything except display and guards
+
+# 8) Request state model in the UI
+
+Statuses shown per `requestId`:
+
+* Pending
+
+  * Spoke escrowed or burned shares
+  * Hub recorded the request
+* In flight value transfer
+
+  * CCTP burn seen but mint not yet seen, or OFT send in flight
+* Claimable
+
+  * Hub marked claimable
+* Claimed
+
+  * User finished claim and hub acked
+* Failed
+
+  * Dead letter or onchain failure
+
+Each status row shows:
+
+* Latest event timestamp
+* Links
+
+  * LZ Scan for control messages
+  * Circle explorer for CCTP burn and mint
+  * Etherscan style link for local txs
+
+# 9) Components
+
+* `<AppProviders>` wraps CDP wallet provider and React Query
+* `<ConnectButton>`
+* `<BalanceCard>`
+* `<PositionsTable>`
+* `<PendingTable>`
+* `<VaultCard>`
+* `<VaultChartTabs>`
+* `<HoldingsTable>`
+* `<TradePanel>`
+
+  * internal `<BuyForm>` and `<SellForm>`
+  * shows `<ModeToggle>` only if base asset is USDC
+* `<StatusDrawer>`
+* `<OnrampButton>` calls `/api/cdp/session` before opening the modal
+
+Skeletons for every data region.
+
+# 10) API routes in the Next app
+
+## POST `/api/cdp/session`
+
+Input:
+
+```json
+{ "address": "0x...", "chainId": 8453, "amount": "1000000" }
+```
+
+Output:
+
+```json
+{ "token": "opaque", "expiresAt": 1723822200 }
+```
+
+## GET `/api/cdp/balances`
+
+Query:
+
+```
+?address=0x...&chains=8453,42161,11155111
+```
+
+Output:
+
+```json
+{
+  "8453": [{ "contract": "0xA0b...USDC", "symbol": "USDC", "decimals": 6, "amount": "25000000" }],
+  "42161": [],
+  "11155111": []
+}
+```
+
+## GET `/api/ops/[requestId]`
+
+Merged view that pulls:
+
+* recent hub and spoke events for this request id
+* LZ message ids and delivered flags if you index them
+* CCTP receipts if present
+
+Output shape:
+
+```json
+{
+  "requestId": "0x...",
+  "type": "DEPOSIT" | "REDEEM",
+  "originChainId": 421614,
+  "destChainId": 84532,
+  "status": "PENDING" | "IN_FLIGHT" | "CLAIMABLE" | "CLAIMED" | "FAILED",
+  "events": [
+    { "ts": 1723822100, "label": "REQUEST_REDEEM sent", "txUrl": "..." },
+    { "ts": 1723822120, "label": "CCTP burn", "txUrl": "..." }
+  ]
+}
+```
+
+# 11) Validation and guards
+
+Buy
+
+* Amount > 0
+* If origin chain wallet USDC < amount, disable and prompt onramp
+* If base is USDC and user chooses Fast mode, ensure `maxFee > 0` and `minFinality == 1000`
+* After submit, create Pending row immediately with `requestId`
+
+Sell
+
+* Shares > 0 and <= user balance
+* Destination chain required
+* Claim button appears only once status is Claimable
+
+# 12) Error cases
+
+* Embedded wallet origin not allowed
+
+  * Blocking error with retry
+* Onramp token mint fails
+
+  * Show modal with retry that calls the API again
+* Contract call revert
+
+  * Show revert reason if available and link to explorer
+* LZ or CCTP step missing for too long
+
+  * Yellow banner on the row with a short help text
+
+# 13) Performance
+
+* Target time to first interactive under 2.5 s on a mid laptop
+* Query caching: balances 10 s, vault metadata 15 s
+* Do not block the page on chart data
+
+# 14) Security
+
+* Server only for CDP secret usage and JWT signing
+* Strict CORS on API routes
+* Never echo secret config in the client
+* Address masking in logs
+
+# 15) Telemetry
+
+* Log create wallet success and failure
+* Log onramp token mint and success events
+* Log each request submission by `requestId` and outcome
+
+# 16) Diagrams for frontend driven flows
+
+### Standard deposit from a spoke to the hub
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as User
+  participant FE as Frontend
+  participant OFT as AssetOFT (spoke)
+  participant LZ as LZ Endpoint
+  participant AO as AsyncComposer (hub)
+  participant V as Hub Vault
+
+  U->>FE: Enter amount, select Standard
+  FE->>OFT: send(amount, compose=depositToHub)
+  OFT->>LZ: send message
+  LZ->>AO: deliver
+  AO->>V: deposit(amount, receiver)
+  V-->>FE: emit RequestCreated(requestId)
+  FE->>FE: show Pending with requestId
+```
+
+### Redeem request and claim with USDC Fast
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as User
+  participant FE as Frontend
+  participant S as SpokeRedeemOApp
+  participant LZ as LZ Endpoint
+  participant AO as AsyncComposer (hub)
+  participant V as Hub Vault
+  participant C as CCTP Bridger
+  participant DT as Destination Treasury
+
+  U->>FE: Sell shares, choose dest chain, Fast
+  FE->>S: requestRedeemOnSpoke(shares)
+  S->>LZ: REQUEST_REDEEM
+  LZ->>AO: deliver
+  AO->>V: requestRedeem(controller, shares)
+  V-->>FE: enqueue ok, status Pending
+
+  Note over V: manager frees liquidity and marks claimable
+
+  U->>FE: Click Claim
+  FE->>S: claimSendUsdcFast(requestId, destDomain, maxFee, minFinality=1000)
+  S->>LZ: CLAIM_SEND_USDC_CCTP
+  LZ->>AO: deliver
+  AO->>V: finalize claim
+  V->>C: bridge USDC Fast
+  C-->>DT: depositForBurnWithHook minted
+  FE->>FE: row becomes Claimed and shows CCTP burn/mint links
+```
+
+# 17) Deliverables checklist
+
+* Next.js app with Tailwind and Embedded Wallets working
+* Dashboard with balances from CDP, positions from onchain, pending table
+* Vault catalog and detail pages
+* Trade panel with Buy and Sell tabs
+* Onramp page with session token flow
+* Status drawer with explorer links
+* Minimal server routes for CDP session and balances
+* Config file for networks, LZ eids, CCTP domains, contract addresses
+
+# 18) Minimal config constants to ship
+
+```ts
+export const NETWORKS = {
+  baseSepolia: { chainId: 84532, name: "Base Sepolia", cctpDomain: 6, lzEid: 40231 },
+  arbSepolia:  { chainId: 421614, name: "Arbitrum Sepolia", cctpDomain: 3, lzEid: 40231 /* example */ },
+  ethSepolia:  { chainId: 11155111, name: "Ethereum Sepolia", cctpDomain: 2, lzEid: 40232 }
+} as const;
+
+export const ADDRS = {
+  hubVault: "0x...",
+  hubComposer: "0x...",
+  shareOFTAdapterHub: "0x...",
+  spoke: {
+    arbSepolia: {
+      shareOFT: "0x...",
+      assetOFT: "0x...",
+      spokeRedeemOApp: "0x..."
+    }
+  },
+  cctp: {
+    baseSepolia: { tokenMessengerV2: "0x...", usdc: "0x..." },
+    arbSepolia:  { tokenMessengerV2: "0x...", usdc: "0x..." }
+  },
+  ccip: {
+    navReceiverBase: "0x...",
+    navPusherArb: "0x..."
+  }
+} as const;
+```
+
+This PRD is scoped to your README. If you follow it, the frontend will accurately reflect the control and value planes, highlight the async nature of redemptions, and make the prize judges see both LayerZero and CCTP clearly in the UX.
