@@ -2,6 +2,80 @@
 
 An omnichain ERC‑4626 vault with sync deposits, async redemptions, native USDC bridging (CCTP v2), and cross‑chain NAV broadcasting (CCIP). Deposit anywhere, queue redemptions asynchronously, and receive native USDC on a destination chain while control/state (NAV) is propagated separately.
 
+```mermaid
+flowchart TD
+  %% Clusters
+  subgraph Spoke_Chain
+    FE["Frontend / User"]
+    SpokeOApp["SpokeRedeemOApp"]
+    ShareOFT_S["Share OFT (spoke)"]
+    AssetOFT_S["Asset OFT (spoke)"]
+  end
+
+  subgraph Hub_Chain
+    AsyncComposer["AsyncComposerOApp (hub)"]
+    Vault["OVault4626AsyncRedeem (hub vault)"]
+    ShareOFT_H["Share OFT Adapter (hub, lockbox)"]
+    CCTPBridger["CctpBridger"]
+    DepositReceiver["CctpDepositReceiver (hub)"]
+  end
+
+  subgraph Destination_Chain
+    AssetOFT_D["Asset OFT (destination)"]
+    USDC_Treasury["USDC Receiver / Treasury"]
+    CCIP_Recv["NavReceiver (CCIP)"]
+  end
+
+  subgraph CCIP
+    CCIP_Push["NavPusher"]
+  end
+
+  %% Standard deposit (OFT)
+  FE -->|"deposit (asset)"| AssetOFT_S
+  AssetOFT_S -->|"LZ send + compose"| AsyncComposer
+  AsyncComposer -->|"deposit"| Vault
+  Vault -->|"mint shares"| ShareOFT_H
+  ShareOFT_H -->|"send shares (OFT)"| AssetOFT_D
+
+  %% USDC Fast deposit (CCTP v2)
+  FE -->|"depositUsdcFast(...)"| SpokeOApp
+  SpokeOApp -->|"OP_DEPOSIT_USDC_CCTP (LZ)"| AsyncComposer
+  AsyncComposer --> CCTPBridger
+  CCTPBridger -->|"depositForBurnWithHook (Fast)"| DepositReceiver
+  DepositReceiver -->|"deposit USDC"| Vault
+  DepositReceiver -->|"local transfer or send shares (OFT)"| AssetOFT_D
+
+  %% Async redeem request
+  FE -->|"requestRedeem(shares)"| SpokeOApp
+  SpokeOApp -->|"OP_REQUEST_REDEEM (LZ)"| AsyncComposer
+  AsyncComposer -->|"requestRedeem"| Vault
+  Vault -->|"managerMarkClaimable (keeper)"| Vault
+
+  %% Claim: OFT delivery
+  FE -->|"claimSendAssets(...)"| SpokeOApp
+  SpokeOApp -->|"OP_CLAIM_SEND_ASSETS (LZ)"| AsyncComposer
+  AsyncComposer -->|"claimRedeemToChain"| Vault
+  Vault -->|"Asset OFT send"| AssetOFT_D
+
+  %% Claim: USDC Fast delivery (CCTP v2)
+  FE -->|"claimSendUsdcFast(...)"| SpokeOApp
+  SpokeOApp -->|"OP_CLAIM_SEND_USDC_CCTP (LZ)"| AsyncComposer
+  AsyncComposer -->|"claimRedeem to bridger"| CCTPBridger
+  CCTPBridger -->|"depositForBurnWithHook (Fast)"| USDC_Treasury
+
+  %% CCIP NAV (control plane)
+  CCIP_Push -->|"ccipSend"| CCIP_Recv
+
+  %% Styling
+  classDef hub fill:#f2f6ff,stroke:#7aa2ff,stroke-width:1px;
+  classDef spoke fill:#f6fff2,stroke:#7acb7a,stroke-width:1px;
+  classDef dst fill:#fff6f2,stroke:#ff9a7a,stroke-width:1px;
+
+  class AsyncComposer,Vault,ShareOFT_H,CCTPBridger,DepositReceiver hub;
+  class FE,SpokeOApp,ShareOFT_S,AssetOFT_S spoke;
+  class AssetOFT_D,USDC_Treasury,CCIP_Recv dst;
+```
+
 ## Prize tracks we’re entering
 - **LayerZero — Best Omnichain Interaction**: Async‑redeem via OApps (spoke → hub) with subsequent actions (claim + delivery), demonstrating non‑trivial state coordination beyond simple token transfer. References: [OApp](https://docs.layerzero.network/v2/developers/evm/oapp/overview), [Composer](https://docs.layerzero.network/v2/developers/evm/composer/overview), [OVault](https://docs.layerzero.network/v2/developers/evm/ovault/overview), [OFT](https://docs.layerzero.network/v2/developers/evm/oft/quickstart). Also see the official prize list: [ETHGlobal NYC Prizes](https://ethglobal.com/events/newyork2025/prizes).
 - **LayerZero — Best Omnichain DeFi Primitive**: Omnichain ERC‑4626 with share lockbox and asset/share OFTs, enabling deposit anywhere → redeem anywhere. 
