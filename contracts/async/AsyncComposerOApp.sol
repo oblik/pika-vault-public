@@ -51,6 +51,20 @@ contract AsyncComposerOApp is OApp {
             uint256 assets = vault.claimRedeem(shares, address(cctpBridger), controller);
             require(assets >= minAssets, "minAssets");
             cctpBridger.bridgeUSDCV2(assets, destDomain, mintRecipient, destCaller, maxFee, minFinality, hookData);
+        } else if (op == AsyncOps.OP_DEPOSIT_USDC_CCTP) {
+            (
+                address sender,
+                uint256 amountAssets,
+                uint32  destDomain,
+                address depositReceiver,
+                uint256 maxFee,
+                uint32  minFinality,
+                address destCaller,
+                bytes memory hookData
+            ) = AsyncCodec.decDepositCCTP(data);
+            // USDC must be held by this contract or bridger. For demo, expect the bridger to pull from itself (approve beforehand if needed)
+            // Here we just initiate the burn/mint to the DepositReceiver, which will deposit and distribute shares.
+            cctpBridger.bridgeUSDCV2(amountAssets, destDomain, depositReceiver, destCaller, maxFee, minFinality, hookData);
         } else {
             revert("AsyncComposer: bad op");
         }

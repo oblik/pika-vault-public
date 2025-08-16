@@ -5,6 +5,8 @@ library AsyncOps {
     uint8 constant OP_REQUEST_REDEEM    = 0xA1;
     uint8 constant OP_CLAIM_SEND_ASSETS = 0xA2;
     uint8 constant OP_CLAIM_SEND_USDC_CCTP = 0xA3;
+    // Optional: deposit via CCTP fast path
+    uint8 constant OP_DEPOSIT_USDC_CCTP = 0xB1;
 }
 
 library AsyncCodec {
@@ -25,7 +27,6 @@ library AsyncCodec {
     { return abi.decode(p, (address,address,uint256,uint32,uint256,bytes)); }
 
     // CCTP (USDC Fast) claim payload encoding
-    // Fields: controller, mintRecipient (receiver), shares, destDomain (CCTP), maxFee, minFinality, destCaller, hookData, minAssets
     function encClaimCCTP(
         address controller,
         address mintRecipient,
@@ -53,4 +54,32 @@ library AsyncCodec {
             uint256 minAssets
         )
     { return abi.decode(p, (address,address,uint256,uint32,uint256,uint32,address,bytes,uint256)); }
+
+    // Deposit CCTP (USDC Fast) payload encoding
+    // Fields: sender (for attribution), amountAssets, destDomain, mintRecipient (this will be DepositReceiver), maxFee, minFinality, destCaller, hookData
+    function encDepositCCTP(
+        address sender,
+        uint256 amountAssets,
+        uint32  destDomain,
+        address mintRecipient,
+        uint256 maxFee,
+        uint32  minFinality,
+        address destCaller,
+        bytes memory hookData
+    ) internal pure returns (bytes memory) {
+        return abi.encode(sender, amountAssets, destDomain, mintRecipient, maxFee, minFinality, destCaller, hookData);
+    }
+
+    function decDepositCCTP(bytes memory p)
+        internal pure returns (
+            address sender,
+            uint256 amountAssets,
+            uint32  destDomain,
+            address mintRecipient,
+            uint256 maxFee,
+            uint32  minFinality,
+            address destCaller,
+            bytes memory hookData
+        )
+    { return abi.decode(p, (address,uint256,uint32,address,uint256,uint32,address,bytes)); }
 }

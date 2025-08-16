@@ -6,7 +6,7 @@ An omnichain ERC‑4626 vault with sync deposits, async redemptions, native USDC
 - **LayerZero — Best Omnichain Interaction**: Async‑redeem via OApps (spoke → hub) with subsequent actions (claim + delivery), demonstrating non‑trivial state coordination beyond simple token transfer. References: [OApp](https://docs.layerzero.network/v2/developers/evm/oapp/overview), [Composer](https://docs.layerzero.network/v2/developers/evm/composer/overview), [OVault](https://docs.layerzero.network/v2/developers/evm/ovault/overview), [OFT](https://docs.layerzero.network/v2/developers/evm/oft/quickstart). Also see the official prize list: [ETHGlobal NYC Prizes](https://ethglobal.com/events/newyork2025/prizes).
 - **LayerZero — Best Omnichain DeFi Primitive**: Omnichain ERC‑4626 with share lockbox and asset/share OFTs, enabling deposit anywhere → redeem anywhere. 
 - **Chainlink CCIP**: Cross‑chain NAV broadcast (control plane) decoupled from value transfer. Starter/refs: [ccip-starter-kit-foundry](https://github.com/smartcontractkit/ccip-starter-kit-foundry).
-- **Circle CCTP**: Native USDC movement (burn on source, mint on destination) at claim settlement.
+- **Circle CCTP**: Native USDC movement (burn on source, mint on destination) for claim and deposit settlement (Fast supported).
 
 ## Demo flow (2–3 minutes)
 1) **Sync deposit (any chain)**
@@ -127,3 +127,35 @@ DEPLOYER_PK=
 - LayerZero: [OApp](https://docs.layerzero.network/v2/developers/evm/oapp/overview) · [OFT](https://docs.layerzero.network/v2/developers/evm/oft/quickstart) · [Composer](https://docs.layerzero.network/v2/developers/evm/composer/overview) · [OVault](https://docs.layerzero.network/v2/developers/evm/ovault/overview)
 - Chainlink CCIP: [ccip-starter-kit-foundry](https://github.com/smartcontractkit/ccip-starter-kit-foundry)
 - ETHGlobal NYC 2025: [Prizes](https://ethglobal.com/events/newyork2025/prizes)
+
+## Frontend integration: choose your rail
+
+### Deposits
+- **Standard (OFT) — available now**
+  - If source = hub: call `vault.deposit(assets, receiver)` directly.
+  - If source ≠ hub: call the Asset OFT `send(...)` with a compose message targeting the hub composer (or use an SDK helper) so the hub deposits and mints shares. This is the default, simplest UX.
+- **USDC Fast (CCTP) — available now**
+  - Call `SpokeRedeemOApp.depositUsdcFast(amountAssets, destDomain, depositReceiver, maxFee>0, minFinality=1000, destCaller, hookData)`.
+  - `depositReceiver` is `CctpDepositReceiver` on the hub, which mints USDC, deposits into the vault, and either transfers shares locally or OFT‑sends them cross‑chain.
+  - `hookData` should encode `(receiver, shareDstEid, minShares, oftOptions)` for the receiver’s `finalizeDeposit`.
+
+### Claims
+- **Standard (OFT)**: The spoke calls `claimSendAssets(...)` on `SpokeRedeemOApp` → hub finalizes claim → Asset OFT `send` to destination `receiver`.
+- **USDC Fast (CCTP)**: The spoke calls `claimSendUsdcFast(...)` on `SpokeRedeemOApp` → hub finalizes claim → `CctpBridger.bridgeUSDCV2` with `maxFee>0` and `minFinality=1000` (Fast).
+
+### Runtime switching (suggested UX)
+- If the underlying is not USDC → always use OFT rails.
+- If the underlying is USDC → show a toggle:
+  - OFF → Standard (OFT)
+  - ON  → Fast (CCTP v2)
+
+### Minimal params you’ll surface in UI (Fast mode)
+- `destDomain` (CCTP domain, e.g., Base=6)
+- `mintRecipient` / `depositReceiver` (hub CCTP receivers)
+- `maxFee` (>0 to enable Fast)
+- `minFinality` (`1000` for Fast, `2000` for Standard)
+- Optional: `hookData`, `destCaller`
+
+Notes
+- CCIP is separate from value transfer; you can fetch/display `lastNAV` via the `NavReceiver` address on destination.
+- For OFT sends, estimate fees with the OFT `quoteSend`; for CCIP, use `router.getFee`; for CCTP Fast, account for `maxFee` and finality.

@@ -76,5 +76,22 @@ contract SpokeRedeemOApp is OAppSender {
 		_lzSend(hubEid, data, _emptyOptions(), MessagingFee(msg.value, 0), payable(msg.sender));
 	}
 
+	// optional: deposit via CCTP Fast (USDC) into the hub and optionally route shares cross-chain via OFT
+	function depositUsdcFast(
+		uint256 amountAssets,
+		uint32  destDomain,
+		address depositReceiver, // CctpDepositReceiver on hub
+		uint256 maxFee,
+		uint32  minFinality,
+		address destCaller,
+		bytes calldata hookData
+	) external payable {
+		bytes memory data = abi.encodePacked(
+			bytes1(AsyncOps.OP_DEPOSIT_USDC_CCTP),
+			AsyncCodec.encDepositCCTP(msg.sender, amountAssets, destDomain, depositReceiver, maxFee, minFinality, destCaller, hookData)
+		);
+		_lzSend(hubEid, data, _emptyOptions(), MessagingFee(msg.value, 0), payable(msg.sender));
+	}
+
 	function _emptyOptions() internal pure returns (bytes memory) { return hex""; }
 }
