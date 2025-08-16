@@ -1,0 +1,7 @@
+ds-test/=node_modules/@layerzerolabs/toolbox-foundry/lib/ds-test
+forge-std/=node_modules/@layerzerolabs/toolbox-foundry/lib/forge-std
+@layerzerolabs/=node_modules/@layerzerolabs/
+@openzeppelin/=node_modules/@openzeppelin/
+@chainlink/=node_modules/@chainlink/
+@chainlink/contracts-ccip/=node_modules/@chainlink/contracts-ccip/contracts/
+@chainlink/contracts/=node_modules/@chainlink/contracts/

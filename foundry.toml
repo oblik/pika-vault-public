@@ -1,0 +1,28 @@
+[profile.default]
+solc-version = '0.8.28'
+src = 'contracts'
+out = 'out'
+test = 'test'
+cache_path = 'cache/foundry'
+verbosity = 3
+optimizer = true
+optimizer_runs = 20_000
+
+libs = [
+    # We provide a set of useful contract utilities
+    # in the lib directory of @layerzerolabs/toolbox-foundry:
+    # 
+    # - forge-std
+    # - ds-test
+    # - solidity-bytes-utils
+    'node_modules/@layerzerolabs/toolbox-foundry/lib',
+    'node_modules',
+]
+
+
+
+[fuzz]
+runs = 1000
+
+[profile.ci.fuzz]
+runs = 16
