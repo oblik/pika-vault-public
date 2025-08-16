@@ -252,4 +252,4 @@ Notes
 
 - Ethereum Sepolia (spoke)
   - Share OFT (MyShareOFT): `0xACF7C2898bF9397AE1453aB98400763FeA2296A3`
-  - SpokeRedeemOApp: `0xEBa7Ee4c64a91B5dDb4631a66E541299f978fdd0`
+  - SpokeRedeemOApp: `0xBb05C630486668cC0069Fd6b40fCad8015E13C1e`
