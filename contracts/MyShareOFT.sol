@@ -38,6 +38,11 @@ contract MyShareOFT is OFT {
         // _mint(msg.sender, 1 ether); // ONLY uncomment for testing UI/integration, never in production
     }
 
+    // Use 6 decimals to match the hub vault share token
+    function decimals() public view virtual override returns (uint8) {
+        return 6;
+    }
+
     /// @notice Burns tokens from the caller
     function burn(uint256 amount) external {
         _burn(msg.sender, amount);
