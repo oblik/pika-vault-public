@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/Header";
 import TradingCard from "@/components/TradingCard";
+import { SharesTable } from "@/components/SharesTable";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,8 +38,6 @@ export default function VaultDetail({ vault }: VaultDetailProps) {
     refetchInterval: 30000, // Refresh every 30 seconds
     staleTime: 15000,
   });
-
-  console.log({ vaultData })
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -170,6 +169,9 @@ export default function VaultDetail({ vault }: VaultDetailProps) {
                   )}
                 </CardContent>
               </Card>
+
+              {/* User Shares Table */}
+              <SharesTable vaultId={vault.id} />
             </div>
 
             {/* Trade Panel */}

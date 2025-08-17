@@ -17,9 +17,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Vault } from "@/config/vaults";
 import { NETWORKS } from "@/config/networks";
-import { getCCTPContracts, CONTRACTS } from "@/config/contracts";
+import { getCCTPContracts, CONTRACTS, getSpokeContracts } from "@/config/contracts";
 import { HUB_CHAIN_ID } from "@/config/chains";
+import { getLayerZeroEndpoint, getLayerZeroEID, getCCTPDomain } from "@/config/layerzero";
 import { Balance } from "@/types";
+import SpokeRedeemOAppAbi from "@/abis/SpokeRedeemOApp.json";
 
 // Contract ABIs
 const ERC20_ABI = [
@@ -115,41 +117,104 @@ export default function TradingCard({ vault }: TradingCardProps) {
   const [depositHash, setDepositHash] = useState<string>("");
   const [error, setError] = useState<string>("");
 
-  // Prepare approve transaction
+  // Helper function to get network name for CDP SendTransactionButton
+  const getNetworkName = (chainId: number) => {
+    switch (chainId) {
+      case 84532: return "base-sepolia";
+      case 421614: return "arbitrum-sepolia"; 
+      case 11155111: return "ethereum-sepolia";
+      default: return "base-sepolia";
+    }
+  };
+
+  // Check if cross-chain deposit
+  const isCrossChain = selectedChain ? parseInt(selectedChain) !== HUB_CHAIN_ID : false;
+
+  // Prepare approve transaction (direct deposit on Hub or cross-chain)
   const approveTransaction = useMemo<SendTransactionButtonProps["transaction"] | null>(() => {
-    if (!evmAddress || !depositAmount || !selectedChain || parseInt(selectedChain) !== HUB_CHAIN_ID) return null;
+    if (!evmAddress || !depositAmount || !selectedChain) return null;
     
+    const chainId = parseInt(selectedChain);
     const amount = parseUnits(depositAmount, 6);
-    const usdcContract = getCCTPContracts(HUB_CHAIN_ID);
+    const usdcContract = getCCTPContracts(chainId);
     if (!usdcContract?.usdc) return null;
+
+    // For hub chain, approve vault directly
+    if (chainId === HUB_CHAIN_ID) {
+      return {
+        to: usdcContract.usdc as `0x${string}`,
+        data: encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [CONTRACTS.hub.vault as `0x${string}`, amount]
+        }),
+        chainId: HUB_CHAIN_ID,
+        type: "eip1559",
+      };
+    }
+
+    // For spoke chains, approve the SpokeRedeemOApp
+    const spokeContracts = getSpokeContracts(chainId);
+    if (!spokeContracts?.spokeRedeemOApp) return null;
 
     return {
       to: usdcContract.usdc as `0x${string}`,
       data: encodeFunctionData({
         abi: ERC20_ABI,
         functionName: 'approve',
-        args: [CONTRACTS.hub.vault as `0x${string}`, amount]
+        args: [spokeContracts.spokeRedeemOApp as `0x${string}`, amount]
       }),
-      chainId: HUB_CHAIN_ID,
+      chainId,
       type: "eip1559",
     };
   }, [evmAddress, depositAmount, selectedChain]);
 
-  // Prepare deposit transaction  
+  // Prepare deposit transaction (direct or cross-chain)
   const depositTransaction = useMemo<SendTransactionButtonProps["transaction"] | null>(() => {
-    if (!evmAddress || !depositAmount || !selectedChain || parseInt(selectedChain) !== HUB_CHAIN_ID || !approveHash) return null;
+    if (!evmAddress || !depositAmount || !selectedChain || !approveHash) return null;
     
+    const chainId = parseInt(selectedChain);
     const amount = parseUnits(depositAmount, 6);
 
+    // Direct deposit on Hub chain
+    if (chainId === HUB_CHAIN_ID) {
+      return {
+        to: CONTRACTS.hub.vault as `0x${string}`,
+        data: encodeFunctionData({
+          abi: ERC4626Abi.abi,
+          functionName: 'deposit',
+          args: [amount, evmAddress as `0x${string}`]
+        }),
+        chainId: HUB_CHAIN_ID,
+        type: "eip1559",
+      };
+    }
+
+    // Cross-chain deposit via SpokeRedeemOApp
+    const spokeContracts = getSpokeContracts(chainId);
+    const cctpDomain = getCCTPDomain(HUB_CHAIN_ID); // Destination is Hub
+    
+    if (!spokeContracts?.spokeRedeemOApp || cctpDomain === null) return null;
+
     return {
-      to: CONTRACTS.hub.vault as `0x${string}`,
+      to: spokeContracts.spokeRedeemOApp as `0x${string}`,
       data: encodeFunctionData({
-        abi: ERC4626Abi.abi,
-        functionName: 'deposit',
-        args: [amount, evmAddress as `0x${string}`]
+        abi: SpokeRedeemOAppAbi.abi,
+        functionName: 'depositUsdcFast',
+        args: [
+          amount,                                    // amountAssets
+          cctpDomain,                               // destDomain (Base Sepolia)
+          CONTRACTS.hub.cctpDepositReceiver,        // depositReceiver
+          parseUnits("0.1", 6),                     // maxFee (0.1 USDC)
+          12,                                       // minFinality (12 blocks)
+          "0x0000000000000000000000000000000000000000" as `0x${string}`, // destCaller (none)
+          "0x" as `0x${string}`                     // hookData (empty)
+        ]
       }),
-      chainId: HUB_CHAIN_ID,
+      chainId,
       type: "eip1559",
+      // NOTE: This needs ETH for LayerZero gas fees - we'll need to estimate this
+      value: parseUnits("0.01", 18) // 0.01 ETH buffer for LZ fees
     };
   }, [evmAddress, depositAmount, selectedChain, approveHash]);
 
@@ -342,18 +407,20 @@ export default function TradingCard({ vault }: TradingCardProps) {
                 </div>
               )}
 
-              <Alert>
-                <AlertDescription>
-                  Cross-chain deposits are processed asynchronously. You'll receive shares after confirmation.
-                </AlertDescription>
-              </Alert>
+              {isCrossChain && (
+                <Alert>
+                  <AlertDescription>
+                    Cross-chain deposits use CCTP Fast for instant USDC bridging to Base. You'll receive vault shares after LayerZero message confirmation (~5-15 minutes).
+                  </AlertDescription>
+                </Alert>
+              )}
 
-              {evmAddress && depositAmount && parseInt(selectedChain) === HUB_CHAIN_ID ? (
+              {evmAddress && depositAmount && selectedChain ? (
                 <div className="space-y-2">
                   {currentStep === 'idle' && (
                     <SendTransactionButton
                       account={evmAddress}
-                      network="base-sepolia"
+                      network={getNetworkName(parseInt(selectedChain))}
                       transaction={approveTransaction!}
                       onSuccess={handleApproveSuccess}
                       onError={handleApproveError}
@@ -365,26 +432,26 @@ export default function TradingCard({ vault }: TradingCardProps) {
                       }}
                       className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg"
                     >
-                      1. Approve USDC
+                      1. Approve USDC {isCrossChain ? '(Cross-chain)' : ''}
                     </SendTransactionButton>
                   )}
                   
                   {currentStep === 'deposit' && depositTransaction && (
                     <SendTransactionButton
                       account={evmAddress}
-                      network="base-sepolia"
+                      network={getNetworkName(parseInt(selectedChain))}
                       transaction={depositTransaction}
                       onSuccess={handleDepositSuccess}
                       onError={handleDepositError}
                       onPending={() => {
-                        toast.loading("Processing Deposit...", {
-                          description: "Please confirm the vault deposit transaction in your wallet",
+                        toast.loading(isCrossChain ? "Processing Cross-chain Deposit..." : "Processing Deposit...", {
+                          description: `Please confirm the ${isCrossChain ? 'cross-chain deposit via CCTP' : 'vault deposit'} transaction in your wallet`,
                           duration: Infinity,
                         });
                       }}
                       className="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg"
                     >
-                      2. Deposit to Vault
+                      2. {isCrossChain ? 'Deposit via CCTP Fast' : 'Deposit to Vault'}
                     </SendTransactionButton>
                   )}
                 </div>
@@ -393,10 +460,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
                   className="w-full bg-green-500 hover:bg-green-600"
                   disabled={true}
                 >
-                  {selectedChain && parseInt(selectedChain) !== HUB_CHAIN_ID 
-                    ? 'Cross-chain deposits coming soon' 
-                    : 'Enter amount and select Base Sepolia'
-                  }
+                  Enter amount and select chain to continue
                 </Button>
               )}
             </div>
