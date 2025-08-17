@@ -347,6 +347,89 @@ Notes
 - CCIP is separate from value transfer; you can fetch/display `lastNAV` via the `NavReceiver` address on destination.
 - For OFT sends, estimate fees with the OFT `quoteSend`; for CCIP, use `router.getFee`; for CCTP Fast, account for `maxFee` and finality.
 
+## Vault trading (buy/sell tokens with USDC)
+
+The vault can execute swaps on allow‑listed routers/aggregators using a generic entrypoint on `OVault4626AsyncRedeem`.
+
+- Manager/routers
+  - `setManager(address)` (owner‑only)
+  - `setRouterAllowed(address,bool)` (owner‑only)
+  - `approveUnderlying(address,uint256)` and `approveToken(address,address,uint256)` (manager‑only)
+  - `externalRouterCall(address router, uint256 value, bytes data)` (manager‑only)
+
+- Safety
+  - All calls gated by `allowedRouters[router]`
+  - `nonReentrant`, explicit approvals, event `ExternalRouterCall(router,value,selector)`
+  - Keep slippage in calldata (`amountOutMin`, etc.)
+
+- Configure (Base Sepolia)
+```bash
+# Set manager
+cast send $VAULT_BASE "setManager(address)" $MANAGER \
+  --rpc-url $RPC_URL_BASE_TESTNET --private-key $OWNER_PK
+
+# Allow routers (Uniswap V2/V3 or aggregators)
+cast send $VAULT_BASE "setRouterAllowed(address,bool)" $UNIV2_ROUTER true \
+  --rpc-url $RPC_URL_BASE_TESTNET --private-key $OWNER_PK
+cast send $VAULT_BASE "setRouterAllowed(address,bool)" $UNIV3_ROUTER true \
+  --rpc-url $RPC_URL_BASE_TESTNET --private-key $OWNER_PK
+```
+
+- Approvals (JIT per trade recommended)
+```bash
+# Approve USDC to router for an exact amount (6 dp)
+cast send $VAULT_BASE "approveUnderlying(address,uint256)" $UNIV2_ROUTER 1000000 \
+  --rpc-url $RPC_URL_BASE_TESTNET --private-key $MANAGER_PK
+
+# Approve arbitrary ERC20 to router
+cast send $VAULT_BASE "approveToken(address,address,uint256)" $TOKEN $UNIV3_ROUTER 1000000000000000000 \
+  --rpc-url $RPC_URL_BASE_TESTNET --private-key $MANAGER_PK
+```
+
+- Execute (generic) — Uniswap V2 swapExactTokensForTokens
+```bash
+DEADLINE=$(($(date +%s)+1800))
+SEL=$(cast sig "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)")
+ARGS=$(cast abi-encode "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)" \
+  1000000 990000 '["'$USDC_BASE'","'$TOKEN'"]' $VAULT_BASE $DEADLINE)
+DATA=$(cast concat-hex $SEL $ARGS)
+
+cast send $VAULT_BASE "externalRouterCall(address,uint256,bytes)" \
+  $UNIV2_ROUTER 0 $DATA --rpc-url $RPC_URL_BASE_TESTNET --private-key $MANAGER_PK
+```
+
+- Execute (generic) — Uniswap V3 exactInputSingle
+```bash
+DEADLINE=$(($(date +%s)+1800))
+SEL=0x04e45aaf # exactInputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))
+ARGS=$(cast abi-encode "exactInputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))" \
+  "[$USDC_BASE,$TOKEN,500,$VAULT_BASE,$DEADLINE,1000000,990000,0]")
+DATA=$(cast concat-hex $SEL $ARGS)
+
+cast send $VAULT_BASE "externalRouterCall(address,uint256,bytes)" \
+  $UNIV3_ROUTER 0 $DATA --rpc-url $RPC_URL_BASE_TESTNET --private-key $MANAGER_PK
+```
+
+- Execute (generic) — Uniswap V3 exactInput (path bytes)
+```bash
+DEADLINE=$(($(date +%s)+1800))
+# path = tokenIn(20) | fee(3) | tokenOut(20); 500 = 0x01f4
+PATH=$(cast concat-hex $USDC_BASE 0x0001f4 $TOKEN)
+SEL=0xb858183f # exactInput((bytes,address,uint256,uint256,uint256))
+ARGS=$(cast abi-encode "exactInput((bytes,address,uint256,uint256,uint256))" \
+  "[$PATH,$VAULT_BASE,$DEADLINE,1000000,990000]")
+DATA=$(cast concat-hex $SEL $ARGS)
+
+cast send $VAULT_BASE "externalRouterCall(address,uint256,bytes)" \
+  $UNIV3_ROUTER 0 $DATA --rpc-url $RPC_URL_BASE_TESTNET --private-key $MANAGER_PK
+```
+
+- NAV (optional): reflect non‑USDC positions in ERC‑4626 math
+```bash
+cast send $VAULT_BASE "setExternalAssetValueUsdc(uint256)" 123456789 \
+  --rpc-url $RPC_URL_BASE_TESTNET --private-key $MANAGER_PK
+```
+
 ## Deployed addresses (testnets)
 
 - Base Sepolia (hub)
