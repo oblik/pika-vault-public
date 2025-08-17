@@ -350,20 +350,25 @@ Notes
 ## Deployed addresses (testnets)
 
 - Base Sepolia (hub)
-  - Vault (OVault4626AsyncRedeem): `0x81A7A4Ece4D161e720ec602Ad152a7026B82448b`
-  - Share Adapter (MyShareOFTAdapter): `0x6Df71536c389d09E9175ea9585f7DCD1A95B29d3`
-  - AsyncComposerOApp (hub): `0xCD771B830C1775308e8EE5B8F582f3956054041c`
-  - CCTP Bridger (Base): `0x42Ffc8306c022Dd17f09daD0FF71f7313Df0A48D`
-  - CctpDepositReceiver: `0x138108cB4Ae27856d292D52205BBC530A4A4E229`
-  - NAV Receiver: `0x77e424Dab916412C04eBe6B8c0435B3202f4C81B`
+  - Vault (OVault4626AsyncRedeem): [0x81A7A4Ece4D161e720ec602Ad152a7026B82448b](https://sepolia.basescan.org/address/0x81A7A4Ece4D161e720ec602Ad152a7026B82448b)
+  - Share Adapter (MyShareOFTAdapter): [0x6Df71536c389d09E9175ea9585f7DCD1A95B29d3](https://sepolia.basescan.org/address/0x6Df71536c389d09E9175ea9585f7DCD1A95B29d3)
+  - AsyncComposerOApp (hub): [0xCD771B830C1775308e8EE5B8F582f3956054041c](https://sepolia.basescan.org/address/0xCD771B830C1775308e8EE5B8F582f3956054041c)
+  - CCTP Bridger (Base): [0x42Ffc8306c022Dd17f09daD0FF71f7313Df0A48D](https://sepolia.basescan.org/address/0x42Ffc8306c022Dd17f09daD0FF71f7313Df0A48D)
+  - CctpDepositReceiver: [0x138108cB4Ae27856d292D52205BBC530A4A4E229](https://sepolia.basescan.org/address/0x138108cB4Ae27856d292D52205BBC530A4A4E229)
+  - NAV Receiver: [0x77e424Dab916412C04eBe6B8c0435B3202f4C81B](https://sepolia.basescan.org/address/0x77e424Dab916412C04eBe6B8c0435B3202f4C81B)
 
 - Arbitrum Sepolia (spoke)
-  - Share OFT (MyShareOFT): `0x6Df71536c389d09E9175ea9585f7DCD1A95B29d3`
-  - SpokeRedeemOApp: `0xC91A582E0FB8f2DbFe1309B3f578876564Bd7Ee0`
-  - NAV Pusher: `0x77e424Dab916412C04eBe6B8c0435B3202f4C81B`
-  - CCTP Bridger (Arb): `0x81A7A4Ece4D161e720ec602Ad152a7026B82448b`
+  - Share OFT (MyShareOFT): [0x6Df71536c389d09E9175ea9585f7DCD1A95B29d3](https://sepolia.arbiscan.io/address/0x6Df71536c389d09E9175ea9585f7DCD1A95B29d3)
+  - SpokeRedeemOApp: [0xC91A582E0FB8f2DbFe1309B3f578876564Bd7Ee0](https://sepolia.arbiscan.io/address/0xC91A582E0FB8f2DbFe1309B3f578876564Bd7Ee0)
+  - NAV Pusher: [0x77e424Dab916412C04eBe6B8c0435B3202f4C81B](https://sepolia.arbiscan.io/address/0x77e424Dab916412C04eBe6B8c0435B3202f4C81B)
+  - CCTP Bridger (Arb): [0x81A7A4Ece4D161e720ec602Ad152a7026B82448b](https://sepolia.arbiscan.io/address/0x81A7A4Ece4D161e720ec602Ad152a7026B82448b)
 
 - Ethereum Sepolia (spoke)
-  - Share OFT (MyShareOFT): `0x26FAEF8F47277cbD719e17732CA60295e434378e`
-  - SpokeRedeemOApp: `0x0935b69d41072e095db332cb97Ff7c2bF0679CDb`
+  - Share OFT (MyShareOFT): [0x26FAEF8F47277cbD719e17732CA60295e434378e](https://sepolia.etherscan.io/address/0x26FAEF8F47277cbD719e17732CA60295e434378e)
+  - SpokeRedeemOApp: [0x0935b69d41072e095db332cb97Ff7c2bF0679CDb](https://sepolia.etherscan.io/address/0x0935b69d41072e095db332cb97Ff7c2bF0679CDb)
   - Note: If you deploy a new Share OFT, also redeploy SpokeRedeemOApp pointing to it and re‑wire hub peer
+
+
+
+
+
