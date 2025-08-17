@@ -337,7 +337,24 @@ export default function TradingCard({ vault }: TradingCardProps) {
       };
     }
 
-    // For hub chain redemptions (not implemented yet)
+    // For hub chain redemptions - direct redeem from vault
+    if (chainId === HUB_CHAIN_ID) {
+      return {
+        to: CONTRACTS.hub.vault as `0x${string}`,
+        data: encodeFunctionData({
+          abi: ERC4626Abi.abi,
+          functionName: 'redeem',
+          args: [
+            shares,                           // shares to redeem
+            evmAddress as `0x${string}`,     // receiver
+            evmAddress as `0x${string}`      // owner
+          ]
+        }),
+        chainId,
+        type: "eip1559",
+      };
+    }
+
     return null;
   }, [evmAddress, redeemShares, selectedChain, approveHash, isRedeemOnSpoke]);
 
@@ -755,10 +772,13 @@ export default function TradingCard({ vault }: TradingCardProps) {
                 </Select>
               </div>
 
-              {isRedeemOnSpoke && (
+              {selectedChain && (
                 <Alert>
                   <AlertDescription>
-                    Cross-chain redemptions use async processing: Your shares will be burned on {getChainName(parseInt(selectedChain || "0"))} and USDC will be claimable on Base after LayerZero message confirmation (~5-15 minutes).
+                    {isRedeemOnSpoke 
+                      ? `Cross-chain redemptions use async processing: Your shares will be burned on ${getChainName(parseInt(selectedChain))} and USDC will be claimable on Base after LayerZero message confirmation (~5-15 minutes).`
+                      : `Direct vault redemption: Your shares will be burned and USDC will be transferred immediately to your wallet.`
+                    }
                   </AlertDescription>
                 </Alert>
               )}
@@ -780,7 +800,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
                       }}
                       className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded-lg"
                     >
-                      1. Approve Shares {isRedeemOnSpoke ? '(Cross-chain)' : ''}
+                      1. Approve Shares {isRedeemOnSpoke ? '(Cross-chain)' : '(Direct)'}
                     </SendTransactionButton>
                   )}
 
@@ -799,7 +819,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
                       }}
                       className="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg"
                     >
-                      2. {isRedeemOnSpoke ? 'Request Async Redeem' : 'Redeem from Vault'}
+                      2. {isRedeemOnSpoke ? 'Request Async Redeem' : 'Redeem Directly'}
                     </SendTransactionButton>
                   )}
                 </div>
