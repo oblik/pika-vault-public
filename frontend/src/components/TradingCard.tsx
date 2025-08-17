@@ -345,15 +345,16 @@ export default function TradingCard({ vault }: TradingCardProps) {
           abi: SpokeRedeemOAppAbi.abi,
           functionName: 'requestRedeemOnSpoke',
           args: [
-            // evmAddress as `0x${string}`,  // controller (recipient)
-            '0xC0A7a3AD0e5A53cEF42AB622381D0b27969c4ab5' as Hex,
+            evmAddress as `0x${string}`,  // controller (recipient)
+            // TODO fix
+            // '0xC0A7a3AD0e5A53cEF42AB622381D0b27969c4ab5' as Hex,
             shares                         // shares to redeem
           ]
         }),
         chainId,
         type: "eip1559",
         // LayerZero gas fees
-        value: parseUnits("0.0001", 18) // 0.01 ETH buffer for LZ fees
+        value: parseUnits("0.001", 18) // 0.01 ETH buffer for LZ fees
       };
     }
 

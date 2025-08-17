@@ -3,7 +3,9 @@
     "allow": [
       "Bash(pnpm run:*)",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "WebFetch(domain:docs.cdp.coinbase.com)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": []
   }
