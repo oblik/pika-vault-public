@@ -5,6 +5,9 @@ import {IERC20, ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IUniswapV2Router02} from "./interfaces/IUniswapV2Router02.sol";
+import {ISwapRouterV3} from "./interfaces/ISwapRouterV3.sol";
 
 interface IERC7540AsyncMinimal is IERC165 {
     // Operator approvals so a smart account or relayer can act for the controller
@@ -19,18 +22,32 @@ interface IAssetOFT {
         external payable returns (uint64, bytes32);
 }
 
-contract OVault4626AsyncRedeem is ERC4626, ReentrancyGuard, IERC7540AsyncMinimal {
+contract OVault4626AsyncRedeem is ERC4626, ReentrancyGuard, IERC7540AsyncMinimal, Ownable {
     // controller => {pending, claimable}
     mapping(address => uint256) public pendingRedeem;
     mapping(address => uint256) public claimableRedeem;
     mapping(address => mapping(address => bool)) public operatorApproval;
+
+    // Manager + trading
+    address public manager;
+    mapping(address => bool) public allowedRouters;
+    uint256 public externalAssetValueUsdc;
+
+    event ManagerUpdated(address indexed newManager);
+    event RouterAllowed(address indexed router, bool allowed);
+    event ExternalNavUpdated(uint256 valueUsdc);
+    event SwapExecuted(address indexed router, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut);
+    event ExternalRouterCall(address indexed router, uint256 value, bytes4 selector);
 
     error AsyncPreview();       // 7540 previews must revert for async paths
     error NotController();
     error Insufficient();
 
     constructor(IERC20 asset_, string memory name_, string memory symbol_)
-        ERC20(name_, symbol_) ERC4626(asset_) {}
+        ERC20(name_, symbol_)
+        ERC4626(asset_)
+        Ownable(msg.sender)
+    {}
 
     // ----- ERC-165 -----
     function supportsInterface(bytes4 id) external pure returns (bool) {
@@ -120,4 +137,58 @@ contract OVault4626AsyncRedeem is ERC4626, ReentrancyGuard, IERC7540AsyncMinimal
     // ----- 7540: previews MUST revert for async redeem vaults -----
     function previewRedeem(uint256) public pure override returns (uint256) { revert AsyncPreview(); }
     function previewWithdraw(uint256) public pure override returns (uint256) { revert AsyncPreview(); }
+
+    // ----- Manager & Router config -----
+    function setManager(address newManager) external onlyOwner {
+        manager = newManager;
+        emit ManagerUpdated(newManager);
+    }
+
+    function setRouterAllowed(address router, bool allowed) external onlyOwner {
+        allowedRouters[router] = allowed;
+        emit RouterAllowed(router, allowed);
+    }
+
+    modifier onlyManager() {
+        require(msg.sender == manager, "NOT_MANAGER");
+        _;
+    }
+
+    // ----- NAV hook for non-USDC positions -----
+    function setExternalAssetValueUsdc(uint256 value) external onlyManager {
+        externalAssetValueUsdc = value;
+        emit ExternalNavUpdated(value);
+    }
+
+    function totalAssets() public view override returns (uint256) {
+        return IERC20(asset()).balanceOf(address(this)) + externalAssetValueUsdc;
+    }
+
+    // ----- Approvals -----
+    function approveUnderlying(address spender, uint256 amount) external onlyManager {
+        IERC20(asset()).approve(spender, 0);
+        IERC20(asset()).approve(spender, amount);
+    }
+
+    function approveToken(address token, address spender, uint256 amount) external onlyManager {
+        IERC20(token).approve(spender, 0);
+        IERC20(token).approve(spender, amount);
+    }
+
+    // ----- Generic external call (router/aggregator) -----
+    // For advanced integrations: manager can call an allowed router with arbitrary calldata and optional msg.value.
+    // Must manage approvals separately via approveUnderlying/approveToken.
+    function externalRouterCall(address router, uint256 value, bytes calldata data)
+        external
+        onlyManager
+        nonReentrant
+        returns (bytes memory result)
+    {
+        require(allowedRouters[router], "ROUTER");
+        (bool ok, bytes memory res) = router.call{value: value}(data);
+        require(ok, "ROUTER_CALL_FAIL");
+        emit ExternalRouterCall(router, value, bytes4(data.length >= 4 ? bytes32(data[:4]) : bytes32(0)));
+        return res;
+    }
+
 }
