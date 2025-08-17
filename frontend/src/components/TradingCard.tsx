@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { parseUnits, encodeFunctionData } from "viem";
 import { toast } from "sonner";
 import { ExternalLink } from "lucide-react";
-import ERC4626Abi from "@/abis/erc4626.json";
+import ERC4626Abi from "@/abis/Erc4626.json";
 import OVault4626AsyncRedeemAbi from "@/abis/OVault4626AsyncRedeem.json";
 import { SendTransactionButton, type SendTransactionButtonProps } from "@coinbase/cdp-react/components/SendTransactionButton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
