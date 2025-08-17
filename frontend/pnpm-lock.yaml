@@ -2,13 +2,13 @@ lockfileVersion: '6.0'
 
 dependencies:
   '@coinbase/cdp-core':
-    specifier: latest
+    specifier: ^0.0.20
     version: 0.0.20(@types/react@19.1.8)(react@19.1.0)(typescript@5.8.3)
   '@coinbase/cdp-hooks':
-    specifier: latest
+    specifier: ^0.0.20
     version: 0.0.20(@coinbase/cdp-core@0.0.20)(react@19.1.0)
   '@coinbase/cdp-react':
-    specifier: latest
+    specifier: ^0.0.20
     version: 0.0.20(@coinbase/cdp-core@0.0.20)(@coinbase/cdp-hooks@0.0.20)(@types/react-dom@19.1.6)(@types/react@19.1.8)(react-dom@19.1.0)(react@19.1.0)
   '@coinbase/onchainkit':
     specifier: ^0.38.19

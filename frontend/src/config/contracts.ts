@@ -12,14 +12,14 @@ export const CONTRACTS = {
   // Spoke contracts per chain
   spokes: {
     arbSepolia: {
-      shareOFT: "0x6Df71536c389d09E9175ea9585f7DCD1A95B29d3",
+      shareOFT: "0x6Df71536c389d09E9175ea9585f7DCD1A95B29d3", // MyShareOFT
       spokeRedeemOApp: "0xC91A582E0FB8f2DbFe1309B3f578876564Bd7Ee0",
       navPusher: "0x77e424Dab916412C04eBe6B8c0435B3202f4C81B",
       cctpBridger: "0x81A7A4Ece4D161e720ec602Ad152a7026B82448b",
     },
     ethSepolia: {
-      shareOFT: "0xACF7C2898bF9397AE1453aB98400763FeA2296A3",
-      spokeRedeemOApp: "0xEB2b3Ce4ff766d1f1032E40576e2298b0eE014Ab",
+      shareOFT: "0x26FAEF8F47277cbD719e17732CA60295e434378e", // MyShareOFT - Updated
+      spokeRedeemOApp: "0x0935b69d41072e095db332cb97Ff7c2bF0679CDb", // Updated
     }
   },
 

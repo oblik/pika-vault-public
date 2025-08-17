@@ -46,7 +46,7 @@ const ERC20_ABI = [
 
 /**
  * GET /api/vault/[vaultId]/nav
- * 
+ *
  * Fetches vault NAV (Net Asset Value) and holdings from the deployed contracts
  */
 export async function GET(
@@ -66,17 +66,17 @@ export async function GET(
     // Create clients for different chains
     const baseClient = createPublicClient({
       chain: baseSepolia,
-      transport: http()
+      transport: http(`https://base-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`)
     });
 
     const arbClient = createPublicClient({
       chain: arbitrumSepolia,
-      transport: http()
+      transport: http(`https://arb-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`)
     });
 
     const ethClient = createPublicClient({
       chain: sepolia,
-      transport: http()
+      transport: http(`https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`)
     });
 
     // Fetch vault data from hub (Base Sepolia)
@@ -94,7 +94,7 @@ export async function GET(
     ]);
 
     // Calculate NAV (price per share)
-    const nav = totalSupply > 0n 
+    const nav = totalSupply > 0n
       ? Number(formatUnits(totalAssets, 6)) / Number(formatUnits(totalSupply, 18))
       : 1.0;
 
@@ -107,19 +107,19 @@ export async function GET(
         functionName: 'balanceOf',
         args: [CONTRACTS.hub.vault as `0x${string}`],
       }),
-      // Arbitrum Sepolia USDC balance  
+      // Arbitrum Sepolia USDC balance
       arbClient.readContract({
         address: CONTRACTS.cctp.arbSepolia.usdc as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'balanceOf',
-        args: [CONTRACTS.spokes.arbSepolia.shareOFT as `0x${string}`],
+        args: [CONTRACTS.spokes.arbSepolia.spokeRedeemOApp as `0x${string}`],
       }),
       // Ethereum Sepolia USDC balance
       ethClient.readContract({
         address: CONTRACTS.cctp.ethSepolia.usdc as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'balanceOf',
-        args: [CONTRACTS.spokes.ethSepolia.shareOFT as `0x${string}`],
+        args: [CONTRACTS.spokes.ethSepolia.spokeRedeemOApp as `0x${string}`],
       }),
     ]);
 
@@ -146,7 +146,7 @@ export async function GET(
         balance: formatUnits(ethUsdcBalance, 6),
         value: formatUnits(ethUsdcBalance, 6)
       }
-    ].filter(holding => Number(holding.balance) > 0); // Only show non-zero holdings
+    ] //.filter(holding => Number(holding.balance) > 0); // Only show non-zero holdings
 
     const navData = {
       nav: nav.toFixed(6),

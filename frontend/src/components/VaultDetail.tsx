@@ -38,6 +38,8 @@ export default function VaultDetail({ vault }: VaultDetailProps) {
     staleTime: 15000,
   });
 
+  console.log({ vaultData })
+
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
@@ -78,7 +80,7 @@ export default function VaultDetail({ vault }: VaultDetailProps) {
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex flex-wrap gap-2 mt-4">
                 {supportedNetworks.map((network, index) => (
                   <Badge key={index} variant="secondary">
@@ -142,15 +144,15 @@ export default function VaultDetail({ vault }: VaultDetailProps) {
                                 <td className="py-3">{holding.chainName}</td>
                                 <td className="py-3">{holding.asset}</td>
                                 <td className="py-3 text-right">
-                                  {parseFloat(holding.balance).toLocaleString(undefined, { 
-                                    minimumFractionDigits: 2, 
-                                    maximumFractionDigits: 6 
+                                  {parseFloat(holding.balance).toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 6
                                   })}
                                 </td>
                                 <td className="py-3 text-right">
-                                  ${parseFloat(holding.value).toLocaleString(undefined, { 
-                                    minimumFractionDigits: 2, 
-                                    maximumFractionDigits: 2 
+                                  ${parseFloat(holding.value).toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
                                   })}
                                 </td>
                               </tr>
