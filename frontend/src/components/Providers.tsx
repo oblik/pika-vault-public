@@ -15,6 +15,7 @@ interface ProvidersProps {
 const CDP_CONFIG: Config = {
   projectId: process.env.NEXT_PUBLIC_CDP_PROJECT_ID ?? "",
   // Add debug logging to troubleshoot refresh token issues
+  // @ts-expect-error staeo
   debug: process.env.NODE_ENV === 'development',
 };
 
@@ -53,10 +54,12 @@ export default function Providers({ children }: ProvidersProps) {
     }
 
     // Add global error handler for CDP errors
-    const handleCDPError = (error: any) => {
-      if (error?.response?.status === 400) {
+    const handleCDPError = (error: unknown) => {
+      if (error && typeof error === 'object' && 'response' in error &&
+          typeof error.response === 'object' && error.response &&
+          'status' in error.response && error.response.status === 400) {
         console.error('CDP 400 Error - This may be related to refresh tokens:', error);
-        
+
         // Clear any stored tokens that might be stale
         if (typeof window !== 'undefined') {
           localStorage.removeItem('cdp-wallet-data');

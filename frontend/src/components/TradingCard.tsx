@@ -7,6 +7,7 @@ import { parseUnits, encodeFunctionData } from "viem";
 import { toast } from "sonner";
 import { ExternalLink } from "lucide-react";
 import ERC4626Abi from "@/abis/erc4626.json";
+import OVault4626AsyncRedeemAbi from "@/abis/OVault4626AsyncRedeem.json";
 import { SendTransactionButton, type SendTransactionButtonProps } from "@coinbase/cdp-react/components/SendTransactionButton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -121,7 +122,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
       if (!evmAddress || !selectedChain) return null;
 
       const chainId = parseInt(selectedChain);
-      
+
       try {
         const response = await fetch(
           `/api/vault/${vault.id}/shares?address=${evmAddress}`
@@ -131,7 +132,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
 
         const data = await response.json();
         const chainShare = data.shares?.find((share: { chainId: number }) => share.chainId === chainId);
-        
+
         if (!chainShare) return { balance: "0", formatted: "0.00" };
 
         const amount = parseFloat(chainShare.formatted.replace(/,/g, ''));
@@ -272,8 +273,8 @@ export default function TradingCard({ vault }: TradingCardProps) {
     if (!evmAddress || !redeemShares || !selectedChain) return null;
 
     const chainId = parseInt(selectedChain);
-    const shares = parseUnits(redeemShares, 6); // Assuming 6 decimals for shares
-    
+    const shares = parseUnits(redeemShares, 18); // ERC4626 vault shares typically use 18 decimals
+
     // For redeem on spoke chains, approve shareOFT to spokeRedeemOApp
     if (isRedeemOnSpoke) {
       const spokeContracts = getSpokeContracts(chainId);
@@ -313,8 +314,8 @@ export default function TradingCard({ vault }: TradingCardProps) {
     if (!evmAddress || !redeemShares || !selectedChain || !approveHash) return null;
 
     const chainId = parseInt(selectedChain);
-    const shares = parseUnits(redeemShares, 6); // Assuming 6 decimals for shares
-    
+    const shares = parseUnits(redeemShares, 18); // ERC4626 vault shares typically use 18 decimals
+
     // For redeem on spoke chains via SpokeRedeemOApp
     if (isRedeemOnSpoke) {
       const spokeContracts = getSpokeContracts(chainId);
@@ -337,17 +338,17 @@ export default function TradingCard({ vault }: TradingCardProps) {
       };
     }
 
-    // For hub chain redemptions - direct redeem from vault
+    // For hub chain redemptions - request async redeem from vault
     if (chainId === HUB_CHAIN_ID) {
       return {
         to: CONTRACTS.hub.vault as `0x${string}`,
         data: encodeFunctionData({
-          abi: ERC4626Abi.abi,
-          functionName: 'redeem',
+          abi: OVault4626AsyncRedeemAbi.abi,
+          functionName: 'requestRedeem',
           args: [
             shares,                           // shares to redeem
-            evmAddress as `0x${string}`,     // receiver
-            evmAddress as `0x${string}`      // owner
+            evmAddress as `0x${string}`,     // controller (who can claim)
+            evmAddress as `0x${string}`      // owner (who owns the shares)
           ]
         }),
         chainId,
@@ -519,10 +520,10 @@ export default function TradingCard({ vault }: TradingCardProps) {
     setCurrentStep('idle');
     setError("");
 
-    const redeemType = isRedeemOnSpoke ? "Async Redeem Request" : "Vault Redeem";
+    const redeemType = isRedeemOnSpoke ? "Cross-chain Redeem Request" : "Hub Redeem Request";
     const description = isRedeemOnSpoke
       ? `Redeem request initiated on ${getChainName(chainId)}. Your USDC will be claimable on Base after processing (~5-15 min).`
-      : `Redeemed ${redeemShares} shares. Your USDC has been transferred!`;
+      : `Redeem request submitted on Base. Your USDC will be claimable after vault manager processing.`;
 
     toast.success(`${redeemType} Successful!`, {
       description,
@@ -559,7 +560,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
     setError(`Redeem request failed: ${error.message}`);
     setCurrentStep('idle');
 
-    const redeemType = isRedeemOnSpoke ? "Async Redeem Request" : "Vault Redeem";
+    const redeemType = isRedeemOnSpoke ? "Cross-chain Redeem Request" : "Hub Redeem Request";
 
     toast.error(`${redeemType} Failed`, {
       description: `Transaction failed on ${getChainName(chainId)}: ${error.message}`,
@@ -669,7 +670,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
               {isCrossChain && (
                 <Alert>
                   <AlertDescription>
-                    Cross-chain deposits use CCTP Fast for instant USDC bridging to Base. You'll receive vault shares after LayerZero message confirmation (~5-15 minutes).
+                    Cross-chain deposits use CCTP Fast for instant USDC bridging to Base. You&apos;ll receive vault shares after LayerZero message confirmation (~5-15 minutes).
                   </AlertDescription>
                 </Alert>
               )}
@@ -679,6 +680,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
                   {currentStep === 'idle' && (
                     <SendTransactionButton
                       account={evmAddress}
+                      // @ts-expect-error network
                       network={getNetworkName(parseInt(selectedChain))}
                       transaction={approveTransaction!}
                       onSuccess={handleApproveSuccess}
@@ -698,6 +700,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
                   {currentStep === 'deposit' && depositTransaction && (
                     <SendTransactionButton
                       account={evmAddress}
+                      // @ts-expect-error network
                       network={getNetworkName(parseInt(selectedChain))}
                       transaction={depositTransaction}
                       onSuccess={handleDepositSuccess}
@@ -775,9 +778,9 @@ export default function TradingCard({ vault }: TradingCardProps) {
               {selectedChain && (
                 <Alert>
                   <AlertDescription>
-                    {isRedeemOnSpoke 
+                    {isRedeemOnSpoke
                       ? `Cross-chain redemptions use async processing: Your shares will be burned on ${getChainName(parseInt(selectedChain))} and USDC will be claimable on Base after LayerZero message confirmation (~5-15 minutes).`
-                      : `Direct vault redemption: Your shares will be burned and USDC will be transferred immediately to your wallet.`
+                      : `Hub redemptions use async processing: Your redemption will be queued and USDC will be claimable after processing by the vault manager.`
                     }
                   </AlertDescription>
                 </Alert>
@@ -788,6 +791,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
                   {currentStep === 'idle' && (
                     <SendTransactionButton
                       account={evmAddress}
+                      // @ts-expect-error network
                       network={getNetworkName(parseInt(selectedChain))}
                       transaction={redeemApproveTransaction!}
                       onSuccess={handleRedeemApproveSuccess}
@@ -800,13 +804,14 @@ export default function TradingCard({ vault }: TradingCardProps) {
                       }}
                       className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded-lg"
                     >
-                      1. Approve Shares {isRedeemOnSpoke ? '(Cross-chain)' : '(Direct)'}
+                      1. Approve Shares {isRedeemOnSpoke ? '(Cross-chain)' : '(Hub)'}
                     </SendTransactionButton>
                   )}
 
                   {currentStep === 'redeem-request' && redeemRequestTransaction && (
                     <SendTransactionButton
                       account={evmAddress}
+                      // @ts-expect-error network
                       network={getNetworkName(parseInt(selectedChain))}
                       transaction={redeemRequestTransaction}
                       onSuccess={handleRedeemRequestSuccess}
@@ -819,7 +824,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
                       }}
                       className="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg"
                     >
-                      2. {isRedeemOnSpoke ? 'Request Async Redeem' : 'Redeem Directly'}
+                      2. {isRedeemOnSpoke ? 'Request Cross-chain Redeem' : 'Request Hub Redeem'}
                     </SendTransactionButton>
                   )}
                 </div>

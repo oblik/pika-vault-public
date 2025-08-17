@@ -17,6 +17,13 @@ interface VaultDetailProps {
   vault: Vault;
 }
 
+interface VaultHolding {
+  chainName: string;
+  asset: string;
+  amount: string;
+  value: string;
+}
+
 /**
  * Vault detail component showing charts, holdings, and trading interface
  */
@@ -138,12 +145,14 @@ export default function VaultDetail({ vault }: VaultDetailProps) {
                         </thead>
                         <tbody>
                           {vaultData?.holdings?.length > 0 ? (
-                            vaultData.holdings.map((holding: any, index: number) => (
+                            vaultData.holdings.map((holding: VaultHolding, index: number) => (
                               <tr key={index} className={index < vaultData.holdings.length - 1 ? "border-b" : ""}>
                                 <td className="py-3">{holding.chainName}</td>
                                 <td className="py-3">{holding.asset}</td>
                                 <td className="py-3 text-right">
-                                  {parseFloat(holding.balance).toLocaleString(undefined, {
+                                  {parseFloat(holding.amount ||
+                                    // @ts-expect-error maybe
+                                    holding['balance']).toLocaleString(undefined, {
                                     minimumFractionDigits: 2,
                                     maximumFractionDigits: 6
                                   })}

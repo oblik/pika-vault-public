@@ -3,7 +3,7 @@ import { createPublicClient, http, getContract } from 'viem';
 import { baseSepolia, arbitrumSepolia, sepolia } from 'viem/chains';
 import { CONTRACTS, getSpokeContracts } from '@/config/contracts';
 import { HUB_CHAIN_ID, SUPPORTED_CHAIN_IDS } from '@/config/chains';
-import { abi as OFT_ABI } from '@/abis/MyShareOFT.json'
+import OFT_ABI from '@/abis/MyShareOFT.json'
 
 // Get chain configuration
 function getChainConfig(chainId: number) {
@@ -43,7 +43,7 @@ function getChainName(chainId: number) {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { vaultId: string } }
+  { params }: { params: Promise<{ vaultId: string }> }
 ) {
   try {
     const { searchParams } = new URL(request.url);
@@ -87,7 +87,7 @@ export async function GET(
 
           const oftContract = getContract({
             address: oftAddress as `0x${string}`,
-            abi: OFT_ABI,
+            abi: OFT_ABI.abi,
             client,
           });
 
@@ -99,8 +99,8 @@ export async function GET(
 
           console.log({ chainId, balance, symbol, decimals });
 
-          const balanceStr = balance.toString();
-          const balanceNumber = Number(balance) / Math.pow(10, decimals);
+          const balanceStr = (balance as bigint).toString();
+          const balanceNumber = Number(balance as bigint) / Math.pow(10, decimals as number);
 
           shares.push({
             chainId,
@@ -110,8 +110,8 @@ export async function GET(
               minimumFractionDigits: 0,
               maximumFractionDigits: 6
             }),
-            symbol,
-            decimals,
+            symbol: symbol as string,
+            decimals: decimals as number,
             contractAddress: oftAddress,
           });
         } catch (error) {
