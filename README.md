@@ -4,9 +4,6 @@ An omnichain ERC‑4626 vault with sync deposits, async redemptions, native USDC
 
 [![Watch the video](https://img.youtube.com/vi/5o7D5INkY30/maxresdefault.jpg)](https://youtu.be/5o7D5INkY30)
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/5o7D5INkY30" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-
-
 
 ```mermaid
 flowchart TD
