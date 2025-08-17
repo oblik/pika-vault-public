@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Providers from "@/components/Providers";
+import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
-  title: "CDP Next.js StarterKit",
-  description: "The CDP Next.js StarterKit",
+  title: "Pika Vault - Omnichain ETF Vaults",
+  description: "Cross-chain vault system for seamless multi-chain asset management",
 };
 
 /**
@@ -16,8 +18,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>
-        <div className="root">{children}</div>
+      <body className="min-h-screen bg-background font-sans antialiased">
+        <Providers>
+          <div className="flex min-h-screen flex-col">
+            {children}
+            <Footer />
+          </div>
+        </Providers>
       </body>
     </html>
   );

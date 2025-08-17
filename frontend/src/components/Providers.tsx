@@ -2,6 +2,9 @@
 
 import { type Config } from "@coinbase/cdp-hooks";
 import { CDPReactProvider, type AppConfig } from "@coinbase/cdp-react/components/CDPReactProvider";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { useState } from "react";
 
 import { theme } from "@/components/theme";
 
@@ -14,7 +17,7 @@ const CDP_CONFIG: Config = {
 };
 
 const APP_CONFIG: AppConfig = {
-  name: "CDP Next.js StarterKit",
+  name: "Pika Vault",
   logoUrl: "http://localhost:3000/logo.svg",
   authMethods: ["email", "sms"],
 };
@@ -27,9 +30,23 @@ const APP_CONFIG: AppConfig = {
  * @returns The wrapped children
  */
 export default function Providers({ children }: ProvidersProps) {
+  const [queryClient] = useState(
+    () => new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 10000, // 10 seconds
+          refetchOnWindowFocus: false,
+        },
+      },
+    })
+  );
+
   return (
-    <CDPReactProvider config={CDP_CONFIG} app={APP_CONFIG} theme={theme}>
-      {children}
-    </CDPReactProvider>
+    <QueryClientProvider client={queryClient}>
+      <CDPReactProvider config={CDP_CONFIG} app={APP_CONFIG} theme={theme}>
+        {children}
+        <ReactQueryDevtools initialIsOpen={false} />
+      </CDPReactProvider>
+    </QueryClientProvider>
   );
 }

@@ -1,16 +1,8 @@
-"use client";
-import ClientApp from "@/components/ClientApp";
-import Providers from "@/components/Providers";
+import { redirect } from "next/navigation";
 
 /**
- * Home page for the Next.js app
- *
- * @returns The home page
+ * Home page redirects to dashboard
  */
 export default function Home() {
-  return (
-    <Providers>
-      <ClientApp />
-    </Providers>
-  );
+  redirect("/dashboard");
 }
