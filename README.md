@@ -182,6 +182,102 @@ DEPLOYER_PK=
   - `setPeer`/`_setPeer`, configure EIDs, and whitelist operators.
   - Smoke test `REQUEST_REDEEM` and `CLAIM_SEND_ASSETS` with small amounts.
 
+- End‑to‑end testnet flow (Base hub ↔ Sepolia spoke)
+  1) Optional: deploy a 6‑dec Share OFT on Sepolia and redeploy Spoke to point to it
+     - Deploy Share OFT (6 dp):
+       ```bash
+       forge script script/10_DeployShareOFT_Sepolia.s.sol:DeployShareOFT_Sepolia \
+         --rpc-url $SEPOLIA_RPC --broadcast -vvvv
+       ```
+     - Export `SHARE_OFT_SEPOLIA` to the printed address
+     - Redeploy Spoke (sets hub automatically in script):
+       ```bash
+       forge script script/07_DeploySpoke_Sepolia.s.sol:DeploySpoke_Sepolia \
+         --rpc-url $SEPOLIA_RPC --broadcast -vvvv
+       ```
+     - Export `SPOKE_REDEEM_OAPP_SEPOLIA` to the printed address
+     - On Base, wire composer → new Spoke (left‑pad address as bytes32):
+       ```bash
+       cast send $ASYNC_COMPOSER_HUB_BASE "setPeer(uint32,bytes32)" \
+         $LZ_EID_SEPOLIA $(cast --to-bytes32 $(cast --to-uint256 $SPOKE_REDEEM_OAPP_SEPOLIA)) \
+         --rpc-url $RPC_URL_BASE_TESTNET --private-key $DEPLOYER_PK
+       ```
+
+  2) Wire share peers (Base ↔ Sepolia)
+     ```bash
+     forge script script/09_UserFlows.s.sol:UserFlows --rpc-url $RPC_URL_BASE_TESTNET \
+       --sig "base_setSharePeerToSepolia()" --broadcast -vvvv
+     forge script script/09_UserFlows.s.sol:UserFlows --rpc-url $SEPOLIA_RPC \
+       --sig "sepolia_setSharePeerToBase()" --broadcast -vvvv
+     ```
+
+  3) Approvals on Base (controller → composer for shares when pulling in request)
+     ```bash
+     cast send $VAULT_BASE "approve(address,uint256)" $ASYNC_COMPOSER_HUB_BASE \
+       0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
+       --rpc-url $RPC_URL_BASE_TESTNET --private-key $CONTROLLER_PK
+     ```
+
+  4) Set operator for claim (controller → composer)
+     ```bash
+     forge script script/09_UserFlows.s.sol:UserFlows --rpc-url $RPC_URL_BASE_TESTNET \
+       --sig "base_setOperator()" --broadcast -vvvv
+     ```
+
+  5) Send shares from Base to Sepolia (6 dp)
+     ```bash
+     forge script script/09_UserFlows.s.sol:UserFlows --rpc-url $RPC_URL_BASE_TESTNET \
+       --sig "base_sendSharesToSepolia(uint256,address)" 10000 $YOUR_SEPOLIA_EOA \
+       --broadcast -vvvv
+     ```
+     - Verify on Sepolia:
+       ```bash
+       cast call $SPOKE_REDEEM_OAPP_SEPOLIA "shareOFT()(address)" --rpc-url $SEPOLIA_RPC
+       cast call $SHARE_OFT_SEPOLIA "decimals()(uint8)" --rpc-url $SEPOLIA_RPC   # expect 6
+       cast call $SHARE_OFT_SEPOLIA "balanceOf(address)(uint256)" $YOUR_SEPOLIA_EOA --rpc-url $SEPOLIA_RPC
+       ```
+
+  6) Request redeem on Sepolia (burn spoke shares, LZ to hub)
+     - The script auto‑quotes LZ fees and adds a small buffer; Spoke sends with embedded executor options.
+     ```bash
+     forge script script/09_UserFlows.s.sol:UserFlows --rpc-url $SEPOLIA_RPC \
+       --sig "sepolia_requestRedeem(uint256)" 10000 --broadcast -vvvv
+     # or burn entire balance
+     forge script script/09_UserFlows.s.sol:UserFlows --rpc-url $SEPOLIA_RPC \
+       --sig "sepolia_requestRedeemAll()" --broadcast -vvvv
+     ```
+
+  7) Mark claimable on Base (6 dp)
+     ```bash
+     forge script script/09_UserFlows.s.sol:UserFlows --rpc-url $RPC_URL_BASE_TESTNET \
+       --sig "base_markClaimable(uint256)" 10000 --broadcast -vvvv
+     ```
+
+  8) Withdraw
+     - USDC Fast (CCTP), initiated from Sepolia (shares in 6 dp):
+       ```bash
+       forge script script/09_UserFlows.s.sol:UserFlows --rpc-url $SEPOLIA_RPC \
+         --sig "sepolia_claimUsdcFast(uint256,uint256)" 10000 0 --broadcast -vvvv
+       ```
+     - Local on Base (receive USDC on Base):
+       ```bash
+       cast send $VAULT_BASE "claimRedeem(uint256,address,address)" \
+         10000 $RECEIVER_BASE $CONTROLLER_ADDRESS \
+         --rpc-url $RPC_URL_BASE_TESTNET --private-key $CONTROLLER_PK
+       ```
+
+  9) Troubleshooting
+     - LZ_InsufficientFee: bump Spoke executor gas or let the script’s +5% buffer cover it
+       ```bash
+       cast send $SPOKE_REDEEM_OAPP_SEPOLIA "setDefaultLzReceive(uint128,uint128)" 400000 0 \
+         --rpc-url $SEPOLIA_RPC --private-key $DEPLOYER_PK
+       ```
+     - Dest revert (ERC20InsufficientAllowance): ensure controller approved composer on Base (step 3)
+     - Observe Base queue:
+       ```bash
+       cast call $VAULT_BASE "pendingRedeem(address)(uint256)" $CONTROLLER_ADDRESS --rpc-url $RPC_URL_BASE_TESTNET
+       cast call $VAULT_BASE "claimableRedeem(address)(uint256)" $CONTROLLER_ADDRESS --rpc-url $RPC_URL_BASE_TESTNET
+       ```
 - User flows (scripts)
   - Set operator (Base): `script/09_UserFlows.s.sol:UserFlows.base_setOperator()`
   - Deposit (Base): `script/09_UserFlows.s.sol:UserFlows.base_deposit(amountAssets)`
