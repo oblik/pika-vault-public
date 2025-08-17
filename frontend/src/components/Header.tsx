@@ -4,8 +4,12 @@ import { AuthButton } from "@coinbase/cdp-react/components/AuthButton";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { toast } from "sonner";
+import { Droplets, Loader2 } from "lucide-react";
 
 import { IconCheck, IconCopy } from "@/components/Icons";
+import { useFaucet } from "@/hooks/useFaucet";
+import { Button } from "@/components/ui/button";
 
 /**
  * Modern Header component with glassmorphism and Pika Vault branding
@@ -14,6 +18,7 @@ export default function Header() {
   const { evmAddress } = useEvmAddress();
   const [isCopied, setIsCopied] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { isLoading: faucetLoading, requestFaucetFunds } = useFaucet();
 
   const copyAddress = async () => {
     if (!evmAddress) return;
@@ -32,6 +37,38 @@ export default function Header() {
     }, 2000);
     return () => clearTimeout(timeout);
   }, [isCopied]);
+
+  const handleFaucetRequest = async () => {
+    if (!evmAddress) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    try {
+      const result = await requestFaucetFunds();
+      
+      if (result) {
+        const { successCount, totalRequests } = result.summary;
+        
+        if (successCount > 0) {
+          toast.success(`Faucet Success! ๐Ÿ'ง`, {
+            description: `${successCount}/${totalRequests} requests successful. Check your wallet!`,
+            duration: 5000,
+          });
+        } else {
+          toast.error("All faucet requests failed", {
+            description: "Please try again later or check rate limits",
+            duration: 5000,
+          });
+        }
+      }
+    } catch (error) {
+      toast.error("Faucet request failed", {
+        description: error instanceof Error ? error.message : "Please try again",
+        duration: 5000,
+      });
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 backdrop-blur-xl bg-pika-bg-primary/80 border-b border-pika-border-primary">
@@ -86,6 +123,26 @@ export default function Header() {
               </button>
             )}
 
+            {/* Faucet Button */}
+            {evmAddress && (
+              <Button
+                onClick={handleFaucetRequest}
+                disabled={faucetLoading}
+                size="sm"
+                variant="outline"
+                className="hidden sm:flex items-center space-x-2 bg-pika-bg-card hover:bg-pika-bg-card-hover border-pika-border-primary hover:border-pika-border-accent transition-all duration-200"
+              >
+                {faucetLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Droplets className="h-4 w-4" />
+                )}
+                <span className="text-sm">
+                  {faucetLoading ? "Getting..." : "Faucet"}
+                </span>
+              </Button>
+            )}
+
             {/* Auth Button */}
             <div className="auth-button-wrapper">
               <AuthButton />
@@ -128,6 +185,29 @@ export default function Header() {
                 Onramp
               </MobileNavLink>
               
+              {/* Mobile Faucet Button */}
+              {evmAddress && (
+                <Button
+                  onClick={() => {
+                    handleFaucetRequest();
+                    setIsMobileMenuOpen(false);
+                  }}
+                  disabled={faucetLoading}
+                  size="sm"
+                  variant="outline"
+                  className="flex items-center space-x-2 w-full bg-pika-bg-card hover:bg-pika-bg-card-hover border-pika-border-primary hover:border-pika-border-accent transition-all duration-200 mt-4"
+                >
+                  {faucetLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Droplets className="h-4 w-4" />
+                  )}
+                  <span className="text-sm">
+                    {faucetLoading ? "Getting Tokens..." : "Get Test Tokens"}
+                  </span>
+                </Button>
+              )}
+
               {/* Mobile Wallet Address */}
               {evmAddress && (
                 <button
@@ -135,7 +215,7 @@ export default function Header() {
                     copyAddress();
                     setIsMobileMenuOpen(false);
                   }}
-                  className="flex items-center space-x-3 px-4 py-3 bg-pika-bg-card hover:bg-pika-bg-card-hover border border-pika-border-primary rounded-lg transition-all duration-200 mt-4"
+                  className="flex items-center space-x-3 px-4 py-3 bg-pika-bg-card hover:bg-pika-bg-card-hover border border-pika-border-primary rounded-lg transition-all duration-200 mt-2"
                 >
                   <div className="w-4 h-4 text-pika-text-secondary">
                     {isCopied ? <IconCheck className="w-4 h-4" /> : <IconCopy className="w-4 h-4" />}

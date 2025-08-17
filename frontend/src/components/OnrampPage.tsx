@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useEvmAddress } from "@coinbase/cdp-hooks";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, ExternalLink, CreditCard, ArrowRight } from "lucide-react";
+import { Loader2, ExternalLink, CreditCard, ArrowRight, Droplets, Zap, CheckCircle, XCircle } from "lucide-react";
 import Header from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
