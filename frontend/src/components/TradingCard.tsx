@@ -5,6 +5,7 @@ import { useEvmAddress } from "@coinbase/cdp-hooks";
 import { useQuery } from "@tanstack/react-query";
 import { parseUnits, encodeFunctionData } from "viem";
 import { toast } from "sonner";
+import { ExternalLink } from "lucide-react";
 import ERC4626Abi from "@/abis/erc4626.json";
 import { SendTransactionButton, type SendTransactionButtonProps } from "@coinbase/cdp-react/components/SendTransactionButton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +21,7 @@ import { NETWORKS } from "@/config/networks";
 import { getCCTPContracts, CONTRACTS, getSpokeContracts } from "@/config/contracts";
 import { HUB_CHAIN_ID } from "@/config/chains";
 import { getLayerZeroEndpoint, getLayerZeroEID, getCCTPDomain } from "@/config/layerzero";
+import { getExplorerUrl, getExplorerName } from "@/config/explorers";
 import { Balance } from "@/types";
 import SpokeRedeemOAppAbi from "@/abis/SpokeRedeemOApp.json";
 
@@ -130,6 +132,16 @@ export default function TradingCard({ vault }: TradingCardProps) {
   // Check if cross-chain deposit
   const isCrossChain = selectedChain ? parseInt(selectedChain) !== HUB_CHAIN_ID : false;
 
+  // Helper function to get chain name
+  const getChainName = (chainId: number) => {
+    switch (chainId) {
+      case 84532: return 'Base Sepolia';
+      case 421614: return 'Arbitrum Sepolia';
+      case 11155111: return 'Ethereum Sepolia';
+      default: return `Chain ${chainId}`;
+    }
+  };
+
   // Prepare approve transaction (direct deposit on Hub or cross-chain)
   const approveTransaction = useMemo<SendTransactionButtonProps["transaction"] | null>(() => {
     if (!evmAddress || !depositAmount || !selectedChain) return null;
@@ -219,28 +231,34 @@ export default function TradingCard({ vault }: TradingCardProps) {
   }, [evmAddress, depositAmount, selectedChain, approveHash]);
 
   const handleApproveSuccess: SendTransactionButtonProps["onSuccess"] = (hash) => {
+    const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
+    const explorerUrl = getExplorerUrl(chainId, hash);
+    const explorerName = getExplorerName(chainId);
+    
     setApproveHash(hash);
     setCurrentStep('deposit');
     setError("");
     
     toast.success("USDC Approval Successful!", {
-      description: `Transaction confirmed. You can now deposit to the vault.`,
-      action: {
-        label: "View Transaction",
-        onClick: () => window.open(`https://sepolia.basescan.org/tx/${hash}`, '_blank')
-      },
+      description: `Transaction confirmed on ${getChainName(chainId)}. You can now deposit to the vault.`,
+      action: explorerUrl ? {
+        label: `View on ${explorerName}`,
+        onClick: () => window.open(explorerUrl, '_blank')
+      } : undefined,
       duration: Infinity, // Don't auto-dismiss
     });
     
-    console.log('Approve successful:', hash);
+    console.log('Approve successful:', hash, 'Chain:', chainId);
   };
 
   const handleApproveError: SendTransactionButtonProps["onError"] = (error) => {
+    const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
+    
     setError(`Approve failed: ${error.message}`);
     setCurrentStep('idle');
     
     toast.error("USDC Approval Failed", {
-      description: error.message,
+      description: `Transaction failed on ${getChainName(chainId)}: ${error.message}`,
       action: {
         label: "Retry",
         onClick: () => handleReset()
@@ -248,21 +266,43 @@ export default function TradingCard({ vault }: TradingCardProps) {
       duration: Infinity,
     });
     
-    console.error('Approve failed:', error);
+    console.error('Approve failed:', error, 'Chain:', chainId);
   };
 
   const handleDepositSuccess: SendTransactionButtonProps["onSuccess"] = (hash) => {
+    const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
+    const explorerUrl = getExplorerUrl(chainId, hash);
+    const explorerName = getExplorerName(chainId);
+    const layerZeroUrl = `https://testnet.layerzeroscan.com/tx/${hash}`;
+    
     setDepositHash(hash);
     setCurrentStep('idle');
     setError("");
     
-    toast.success("Vault Deposit Successful!", {
-      description: `Successfully deposited ${depositAmount} USDC to Pika Vault. Your shares have been minted!`,
-      action: {
-        label: "View Transaction", 
-        onClick: () => window.open(`https://sepolia.basescan.org/tx/${hash}`, '_blank')
-      },
+    const depositType = isCrossChain ? "Cross-chain Deposit" : "Vault Deposit";
+    const description = isCrossChain 
+      ? `Deposit initiated on ${getChainName(chainId)}. Shares will arrive on Base in ~5-15 min.`
+      : `Deposited ${depositAmount} USDC. Your shares have been minted!`;
+    
+    toast.success(`${depositType} Successful!`, {
+      description,
+      action: explorerUrl ? {
+        label: `View on ${explorerName}`,
+        onClick: () => window.open(explorerUrl, '_blank')
+      } : undefined,
       duration: Infinity,
+      // Add LayerZero scan link for cross-chain deposits
+      ...(isCrossChain && {
+        cancel: {
+          label: (
+            <div className="flex items-center gap-1">
+              <span className="text-xs bg-black text-white rounded px-1">0</span>
+              LayerZero
+            </div>
+          ),
+          onClick: () => window.open(layerZeroUrl, '_blank')
+        }
+      })
     });
     
     // Reset form
@@ -270,15 +310,19 @@ export default function TradingCard({ vault }: TradingCardProps) {
     setSelectedChain("");
     setApproveHash("");
     
-    console.log('Deposit successful:', hash);
+    console.log('Deposit successful:', hash, 'Chain:', chainId);
   };
 
   const handleDepositError: SendTransactionButtonProps["onError"] = (error) => {
+    const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
+    
     setError(`Deposit failed: ${error.message}`);
     setCurrentStep('idle');
     
-    toast.error("Vault Deposit Failed", {
-      description: error.message,
+    const depositType = isCrossChain ? "Cross-chain Deposit" : "Vault Deposit";
+    
+    toast.error(`${depositType} Failed`, {
+      description: `Transaction failed on ${getChainName(chainId)}: ${error.message}`,
       action: {
         label: "Retry",
         onClick: () => handleReset()
