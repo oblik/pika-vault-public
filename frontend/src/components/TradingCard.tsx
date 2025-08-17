@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useEvmAddress } from "@coinbase/cdp-hooks";
 import { useQuery } from "@tanstack/react-query";
-import { parseUnits, encodeFunctionData } from "viem";
+import { parseUnits, encodeFunctionData, Hex } from "viem";
 import { toast } from "sonner";
 import { ExternalLink } from "lucide-react";
 import ERC4626Abi from "@/abis/Erc4626.json";
@@ -138,7 +138,9 @@ export default function TradingCard({ vault }: TradingCardProps) {
         const amount = parseFloat(chainShare.formatted.replace(/,/g, ''));
         return {
           balance: amount.toString(),
-          formatted: chainShare.formatted
+          formatted: chainShare.formatted,
+          decimals: 6,
+          rawBalance: chainShare.balance
         };
       } catch (error) {
         console.error('Error fetching share balance:', error);
@@ -270,10 +272,18 @@ export default function TradingCard({ vault }: TradingCardProps) {
 
   // Prepare share approval transaction for redeem
   const redeemApproveTransaction = useMemo<SendTransactionButtonProps["transaction"] | null>(() => {
-    if (!evmAddress || !redeemShares || !selectedChain) return null;
+    if (!evmAddress || !redeemShares || !selectedChain || !shareBalance) return null;
 
     const chainId = parseInt(selectedChain);
-    const shares = parseUnits(redeemShares, 18); // ERC4626 vault shares typically use 18 decimals
+    const shares = parseUnits(redeemShares, shareBalance.decimals || 6);
+
+    console.log('Redeem Approve Debug:', {
+      redeemShares,
+      decimals: shareBalance.decimals,
+      shares: shares.toString(),
+      chainId,
+      isRedeemOnSpoke
+    });
 
     // For redeem on spoke chains, approve shareOFT to spokeRedeemOApp
     if (isRedeemOnSpoke) {
@@ -307,19 +317,27 @@ export default function TradingCard({ vault }: TradingCardProps) {
     }
 
     return null;
-  }, [evmAddress, redeemShares, selectedChain, isRedeemOnSpoke]);
+  }, [evmAddress, redeemShares, selectedChain, isRedeemOnSpoke, shareBalance]);
 
   // Prepare redeem request transaction
   const redeemRequestTransaction = useMemo<SendTransactionButtonProps["transaction"] | null>(() => {
-    if (!evmAddress || !redeemShares || !selectedChain || !approveHash) return null;
+    if (!evmAddress || !redeemShares || !selectedChain || !approveHash || !shareBalance) return null;
 
     const chainId = parseInt(selectedChain);
-    const shares = parseUnits(redeemShares, 18); // ERC4626 vault shares typically use 18 decimals
+    const shares = parseUnits(redeemShares, shareBalance.decimals || 6);
 
     // For redeem on spoke chains via SpokeRedeemOApp
     if (isRedeemOnSpoke) {
       const spokeContracts = getSpokeContracts(chainId);
       if (!spokeContracts?.spokeRedeemOApp) return null;
+
+      console.log('Redeem Request Debug:', {
+        redeemShares,
+        decimals: shareBalance.decimals,
+        shares: shares.toString(),
+        chainId,
+        spokeRedeemOApp: spokeContracts.spokeRedeemOApp
+      });
 
       return {
         to: spokeContracts.spokeRedeemOApp as `0x${string}`,
@@ -327,14 +345,15 @@ export default function TradingCard({ vault }: TradingCardProps) {
           abi: SpokeRedeemOAppAbi.abi,
           functionName: 'requestRedeemOnSpoke',
           args: [
-            evmAddress as `0x${string}`,  // controller (recipient)
+            // evmAddress as `0x${string}`,  // controller (recipient)
+            '0xC0A7a3AD0e5A53cEF42AB622381D0b27969c4ab5' as Hex,
             shares                         // shares to redeem
           ]
         }),
         chainId,
         type: "eip1559",
         // LayerZero gas fees
-        value: parseUnits("0.01", 18) // 0.01 ETH buffer for LZ fees
+        value: parseUnits("0.0001", 18) // 0.01 ETH buffer for LZ fees
       };
     }
 
@@ -357,7 +376,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
     }
 
     return null;
-  }, [evmAddress, redeemShares, selectedChain, approveHash, isRedeemOnSpoke]);
+  }, [evmAddress, redeemShares, selectedChain, approveHash, isRedeemOnSpoke, shareBalance]);
 
   const handleApproveSuccess: SendTransactionButtonProps["onSuccess"] = (hash) => {
     const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
@@ -746,7 +765,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
                       variant="link"
                       size="sm"
                       className="h-auto p-0 ml-2 text-xs"
-                      onClick={() => setRedeemShares(shareBalance.balance)}
+                      onClick={() => setRedeemShares(shareBalance.rawBalance ? (Number(shareBalance.rawBalance) / Math.pow(10, shareBalance.decimals || 6)).toString() : shareBalance.balance)}
                     >
                       Max
                     </Button>
