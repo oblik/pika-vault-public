@@ -45,7 +45,8 @@ contract SpokeRedeemOApp is OAppSender {
 
 		bytes memory data = abi.encodePacked(
 			bytes1(AsyncOps.OP_REQUEST_REDEEM),
-			AsyncCodec.encRequest(controller, msg.sender, shares)
+			// set hub-side owner to controller so the composer pulls from controller's Base shares
+			AsyncCodec.encRequest(controller, controller, shares)
 		);
 
 		_lzSend(
