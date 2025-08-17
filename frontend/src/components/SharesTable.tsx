@@ -185,7 +185,7 @@ export function SharesTable({ vaultId }: SharesTableProps) {
             {/* No Shares Message */}
             {sharesData.shares.every(share => parseFloat(share.formatted.replace(/,/g, '')) === 0) && (
               <div className="text-center py-8 text-muted-foreground">
-                <p>You don't have any vault shares yet.</p>
+                <p>You don&apos;t have any vault shares yet.</p>
                 <p className="text-sm mt-2">Make a deposit to start earning vault shares!</p>
               </div>
             )}

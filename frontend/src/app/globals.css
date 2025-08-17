@@ -189,3 +189,89 @@ body::before {
 [data-radix-portal] [data-state="open"] {
   background-color: rgba(0, 0, 0, 0.8) !important;
 }
+
+/* Custom Sonner Toast Styling */
+[data-sonner-toast] {
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--card-foreground)) !important;
+  border-radius: calc(var(--radius) - 2px) !important;
+  box-shadow: 0 10px 38px -10px hsla(222, 47%, 11%, 0.35), 0 10px 20px -15px hsla(222, 47%, 11%, 0.2) !important;
+}
+
+[data-sonner-toast][data-type="success"] {
+  border-left: 3px solid hsl(142 76% 36%) !important;
+}
+
+[data-sonner-toast][data-type="error"] {
+  border-left: 3px solid hsl(var(--destructive)) !important;
+}
+
+[data-sonner-toast][data-type="loading"] {
+  border-left: 3px solid hsl(var(--primary)) !important;
+}
+
+/* Toast content styling */
+[data-sonner-toast] [data-content] {
+  color: hsl(var(--card-foreground)) !important;
+}
+
+[data-sonner-toast] [data-title] {
+  color: hsl(var(--card-foreground)) !important;
+  font-weight: 600 !important;
+}
+
+[data-sonner-toast] [data-description] {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Toast action buttons */
+[data-sonner-toast] [data-button] {
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  border: none !important;
+  border-radius: calc(var(--radius) - 4px) !important;
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  transition: all 0.2s !important;
+}
+
+[data-sonner-toast] [data-button]:hover {
+  background: hsl(var(--primary) / 0.9) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Toast cancel button (LayerZero button) */
+[data-sonner-toast] [data-cancel] {
+  background: transparent !important;
+  color: hsl(var(--foreground)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: calc(var(--radius) - 4px) !important;
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  transition: all 0.2s !important;
+}
+
+[data-sonner-toast] [data-cancel]:hover {
+  background: hsl(var(--accent)) !important;
+  border-color: hsl(var(--primary)) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Close button */
+[data-sonner-toast] [data-close-button] {
+  background: transparent !important;
+  color: hsl(var(--muted-foreground)) !important;
+  border: none !important;
+  border-radius: 50% !important;
+  width: 20px !important;
+  height: 20px !important;
+  transition: all 0.2s !important;
+}
+
+[data-sonner-toast] [data-close-button]:hover {
+  background: hsl(var(--accent)) !important;
+  color: hsl(var(--foreground)) !important;
+}

@@ -75,31 +75,31 @@ export default function TradingCard({ vault }: TradingCardProps) {
     queryKey: ['usdc-balance', evmAddress, selectedChain],
     queryFn: async () => {
       if (!evmAddress || !selectedChain) return null;
-      
+
       const usdcContract = getCCTPContracts(parseInt(selectedChain))?.usdc;
       if (!usdcContract) return null;
-      
+
       try {
         const response = await fetch(
           `/api/cdp/balances?address=${evmAddress}&chains=${selectedChain}`
         );
-        
+
         if (!response.ok) throw new Error('Failed to fetch balance');
-        
+
         const balances: Record<string, Balance[]> = await response.json();
         const chainBalances = balances[selectedChain] || [];
-        const usdcBalance = chainBalances.find((b: Balance) => 
+        const usdcBalance = chainBalances.find((b: Balance) =>
           b.contract.toLowerCase() === usdcContract.toLowerCase()
         );
-        
+
         if (!usdcBalance) return { balance: "0", formatted: "0.00" };
-        
+
         const amount = parseInt(usdcBalance.amount) / Math.pow(10, usdcBalance.decimals);
         const formatted = amount.toLocaleString(undefined, {
           minimumFractionDigits: 2,
           maximumFractionDigits: 6
         });
-        
+
         return {
           balance: amount.toString(),
           formatted
@@ -114,23 +114,60 @@ export default function TradingCard({ vault }: TradingCardProps) {
     refetchInterval: 30000,
   });
 
-  const [currentStep, setCurrentStep] = useState<'approve' | 'deposit' | 'idle'>('idle');
+  // Fetch share balance for redemption
+  const { data: shareBalance, isLoading: shareBalanceLoading } = useQuery({
+    queryKey: ['share-balance', evmAddress, selectedChain],
+    queryFn: async () => {
+      if (!evmAddress || !selectedChain) return null;
+
+      const chainId = parseInt(selectedChain);
+      
+      try {
+        const response = await fetch(
+          `/api/vault/${vault.id}/shares?address=${evmAddress}`
+        );
+
+        if (!response.ok) throw new Error('Failed to fetch share balance');
+
+        const data = await response.json();
+        const chainShare = data.shares?.find((share: { chainId: number }) => share.chainId === chainId);
+        
+        if (!chainShare) return { balance: "0", formatted: "0.00" };
+
+        const amount = parseFloat(chainShare.formatted.replace(/,/g, ''));
+        return {
+          balance: amount.toString(),
+          formatted: chainShare.formatted
+        };
+      } catch (error) {
+        console.error('Error fetching share balance:', error);
+        return null;
+      }
+    },
+    enabled: !!evmAddress && !!selectedChain,
+    staleTime: 30000,
+    refetchInterval: 30000,
+  });
+
+  const [currentStep, setCurrentStep] = useState<'approve' | 'deposit' | 'redeem-approve' | 'redeem-request' | 'idle'>('idle');
   const [approveHash, setApproveHash] = useState<string>("");
   const [depositHash, setDepositHash] = useState<string>("");
+  const [redeemHash, setRedeemHash] = useState<string>("");
   const [error, setError] = useState<string>("");
 
   // Helper function to get network name for CDP SendTransactionButton
   const getNetworkName = (chainId: number) => {
     switch (chainId) {
       case 84532: return "base-sepolia";
-      case 421614: return "arbitrum-sepolia"; 
+      case 421614: return "arbitrum-sepolia";
       case 11155111: return "ethereum-sepolia";
       default: return "base-sepolia";
     }
   };
 
-  // Check if cross-chain deposit
+  // Check if cross-chain deposit/redeem
   const isCrossChain = selectedChain ? parseInt(selectedChain) !== HUB_CHAIN_ID : false;
+  const isRedeemOnSpoke = selectedChain ? parseInt(selectedChain) !== HUB_CHAIN_ID : false;
 
   // Helper function to get chain name
   const getChainName = (chainId: number) => {
@@ -145,7 +182,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
   // Prepare approve transaction (direct deposit on Hub or cross-chain)
   const approveTransaction = useMemo<SendTransactionButtonProps["transaction"] | null>(() => {
     if (!evmAddress || !depositAmount || !selectedChain) return null;
-    
+
     const chainId = parseInt(selectedChain);
     const amount = parseUnits(depositAmount, 6);
     const usdcContract = getCCTPContracts(chainId);
@@ -184,7 +221,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
   // Prepare deposit transaction (direct or cross-chain)
   const depositTransaction = useMemo<SendTransactionButtonProps["transaction"] | null>(() => {
     if (!evmAddress || !depositAmount || !selectedChain || !approveHash) return null;
-    
+
     const chainId = parseInt(selectedChain);
     const amount = parseUnits(depositAmount, 6);
 
@@ -205,7 +242,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
     // Cross-chain deposit via SpokeRedeemOApp
     const spokeContracts = getSpokeContracts(chainId);
     const cctpDomain = getCCTPDomain(HUB_CHAIN_ID); // Destination is Hub
-    
+
     if (!spokeContracts?.spokeRedeemOApp || cctpDomain === null) return null;
 
     return {
@@ -230,33 +267,107 @@ export default function TradingCard({ vault }: TradingCardProps) {
     };
   }, [evmAddress, depositAmount, selectedChain, approveHash]);
 
+  // Prepare share approval transaction for redeem
+  const redeemApproveTransaction = useMemo<SendTransactionButtonProps["transaction"] | null>(() => {
+    if (!evmAddress || !redeemShares || !selectedChain) return null;
+
+    const chainId = parseInt(selectedChain);
+    const shares = parseUnits(redeemShares, 6); // Assuming 6 decimals for shares
+    
+    // For redeem on spoke chains, approve shareOFT to spokeRedeemOApp
+    if (isRedeemOnSpoke) {
+      const spokeContracts = getSpokeContracts(chainId);
+      if (!spokeContracts?.shareOFT || !spokeContracts?.spokeRedeemOApp) return null;
+
+      return {
+        to: spokeContracts.shareOFT as `0x${string}`,
+        data: encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [spokeContracts.spokeRedeemOApp as `0x${string}`, shares]
+        }),
+        chainId,
+        type: "eip1559",
+      };
+    }
+
+    // For hub chain redemptions - approve vault shares to vault contract
+    if (chainId === HUB_CHAIN_ID) {
+      return {
+        to: CONTRACTS.hub.vault as `0x${string}`,
+        data: encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [CONTRACTS.hub.vault as `0x${string}`, shares]
+        }),
+        chainId,
+        type: "eip1559",
+      };
+    }
+
+    return null;
+  }, [evmAddress, redeemShares, selectedChain, isRedeemOnSpoke]);
+
+  // Prepare redeem request transaction
+  const redeemRequestTransaction = useMemo<SendTransactionButtonProps["transaction"] | null>(() => {
+    if (!evmAddress || !redeemShares || !selectedChain || !approveHash) return null;
+
+    const chainId = parseInt(selectedChain);
+    const shares = parseUnits(redeemShares, 6); // Assuming 6 decimals for shares
+    
+    // For redeem on spoke chains via SpokeRedeemOApp
+    if (isRedeemOnSpoke) {
+      const spokeContracts = getSpokeContracts(chainId);
+      if (!spokeContracts?.spokeRedeemOApp) return null;
+
+      return {
+        to: spokeContracts.spokeRedeemOApp as `0x${string}`,
+        data: encodeFunctionData({
+          abi: SpokeRedeemOAppAbi.abi,
+          functionName: 'requestRedeemOnSpoke',
+          args: [
+            evmAddress as `0x${string}`,  // controller (recipient)
+            shares                         // shares to redeem
+          ]
+        }),
+        chainId,
+        type: "eip1559",
+        // LayerZero gas fees
+        value: parseUnits("0.01", 18) // 0.01 ETH buffer for LZ fees
+      };
+    }
+
+    // For hub chain redemptions (not implemented yet)
+    return null;
+  }, [evmAddress, redeemShares, selectedChain, approveHash, isRedeemOnSpoke]);
+
   const handleApproveSuccess: SendTransactionButtonProps["onSuccess"] = (hash) => {
     const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
     const explorerUrl = getExplorerUrl(chainId, hash);
     const explorerName = getExplorerName(chainId);
-    
+
     setApproveHash(hash);
     setCurrentStep('deposit');
     setError("");
-    
+
     toast.success("USDC Approval Successful!", {
       description: `Transaction confirmed on ${getChainName(chainId)}. You can now deposit to the vault.`,
       action: explorerUrl ? {
-        label: `View on ${explorerName}`,
+        label: `View`,
         onClick: () => window.open(explorerUrl, '_blank')
       } : undefined,
       duration: Infinity, // Don't auto-dismiss
     });
-    
+
     console.log('Approve successful:', hash, 'Chain:', chainId);
   };
 
   const handleApproveError: SendTransactionButtonProps["onError"] = (error) => {
     const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
-    
+
     setError(`Approve failed: ${error.message}`);
     setCurrentStep('idle');
-    
+
     toast.error("USDC Approval Failed", {
       description: `Transaction failed on ${getChainName(chainId)}: ${error.message}`,
       action: {
@@ -265,7 +376,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
       },
       duration: Infinity,
     });
-    
+
     console.error('Approve failed:', error, 'Chain:', chainId);
   };
 
@@ -274,20 +385,20 @@ export default function TradingCard({ vault }: TradingCardProps) {
     const explorerUrl = getExplorerUrl(chainId, hash);
     const explorerName = getExplorerName(chainId);
     const layerZeroUrl = `https://testnet.layerzeroscan.com/tx/${hash}`;
-    
+
     setDepositHash(hash);
     setCurrentStep('idle');
     setError("");
-    
+
     const depositType = isCrossChain ? "Cross-chain Deposit" : "Vault Deposit";
-    const description = isCrossChain 
+    const description = isCrossChain
       ? `Deposit initiated on ${getChainName(chainId)}. Shares will arrive on Base in ~5-15 min.`
       : `Deposited ${depositAmount} USDC. Your shares have been minted!`;
-    
+
     toast.success(`${depositType} Successful!`, {
       description,
       action: explorerUrl ? {
-        label: `View on ${explorerName}`,
+        label: `View`,
         onClick: () => window.open(explorerUrl, '_blank')
       } : undefined,
       duration: Infinity,
@@ -295,32 +406,32 @@ export default function TradingCard({ vault }: TradingCardProps) {
       ...(isCrossChain && {
         cancel: {
           label: (
-            <div className="flex items-center gap-1">
-              <span className="text-xs bg-black text-white rounded px-1">0</span>
-              LayerZero
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-mono bg-primary text-primary-foreground rounded border px-1.5 py-0.5">0</span>
+              <span className="text-sm font-medium">0</span>
             </div>
           ),
           onClick: () => window.open(layerZeroUrl, '_blank')
         }
       })
     });
-    
+
     // Reset form
     setDepositAmount("");
     setSelectedChain("");
     setApproveHash("");
-    
+
     console.log('Deposit successful:', hash, 'Chain:', chainId);
   };
 
   const handleDepositError: SendTransactionButtonProps["onError"] = (error) => {
     const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
-    
+
     setError(`Deposit failed: ${error.message}`);
     setCurrentStep('idle');
-    
+
     const depositType = isCrossChain ? "Cross-chain Deposit" : "Vault Deposit";
-    
+
     toast.error(`${depositType} Failed`, {
       description: `Transaction failed on ${getChainName(chainId)}: ${error.message}`,
       action: {
@@ -329,7 +440,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
       },
       duration: Infinity,
     });
-    
+
     console.error('Deposit failed:', error);
   };
 
@@ -337,29 +448,116 @@ export default function TradingCard({ vault }: TradingCardProps) {
     setCurrentStep('idle');
     setApproveHash("");
     setDepositHash("");
+    setRedeemHash("");
     setError("");
     toast.dismiss(); // Dismiss any existing toasts
   };
 
-  const handleRedeem = async () => {
-    if (!evmAddress || !redeemShares || !selectedChain) return;
-    
-    try {
-      console.log('Redeem params:', {
-        shares: redeemShares,
-        chainId: selectedChain,
-        vault: vault.id
-      });
+  // Handle redeem approve success
+  const handleRedeemApproveSuccess: SendTransactionButtonProps["onSuccess"] = (hash) => {
+    const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
+    const explorerUrl = getExplorerUrl(chainId, hash);
 
-      // TODO: Implement redeem logic
-      console.log('Calling redeem...');
-      
-      // Reset form
-      setRedeemShares("");
-    } catch (error) {
-      console.error('Redeem failed:', error);
-    }
+    setApproveHash(hash);
+    setCurrentStep('redeem-request');
+    setError("");
+
+    toast.success("Share Approval Successful!", {
+      description: `Shares approved on ${getChainName(chainId)}. You can now request redemption.`,
+      action: explorerUrl ? {
+        label: `View`,
+        onClick: () => window.open(explorerUrl, '_blank')
+      } : undefined,
+      duration: Infinity,
+    });
+
+    console.log('Redeem approve successful:', hash, 'Chain:', chainId);
   };
+
+  const handleRedeemApproveError: SendTransactionButtonProps["onError"] = (error) => {
+    const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
+
+    setError(`Share approval failed: ${error.message}`);
+    setCurrentStep('idle');
+
+    toast.error("Share Approval Failed", {
+      description: `Transaction failed on ${getChainName(chainId)}: ${error.message}`,
+      action: {
+        label: "Retry",
+        onClick: () => handleReset()
+      },
+      duration: Infinity,
+    });
+
+    console.error('Redeem approve failed:', error, 'Chain:', chainId);
+  };
+
+  // Handle redeem request success
+  const handleRedeemRequestSuccess: SendTransactionButtonProps["onSuccess"] = (hash) => {
+    const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
+    const explorerUrl = getExplorerUrl(chainId, hash);
+    const layerZeroUrl = `https://testnet.layerzeroscan.com/tx/${hash}`;
+
+    setRedeemHash(hash);
+    setCurrentStep('idle');
+    setError("");
+
+    const redeemType = isRedeemOnSpoke ? "Async Redeem Request" : "Vault Redeem";
+    const description = isRedeemOnSpoke
+      ? `Redeem request initiated on ${getChainName(chainId)}. Your USDC will be claimable on Base after processing (~5-15 min).`
+      : `Redeemed ${redeemShares} shares. Your USDC has been transferred!`;
+
+    toast.success(`${redeemType} Successful!`, {
+      description,
+      action: explorerUrl ? {
+        label: `View`,
+        onClick: () => window.open(explorerUrl, '_blank')
+      } : undefined,
+      duration: Infinity,
+      // Add LayerZero scan link for cross-chain redemptions
+      ...(isRedeemOnSpoke && {
+        cancel: {
+          label: (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-mono bg-primary text-primary-foreground rounded border px-1.5 py-0.5">0</span>
+              <span className="text-sm font-medium">0</span>
+            </div>
+          ),
+          onClick: () => window.open(layerZeroUrl, '_blank')
+        }
+      })
+    });
+
+    // Reset form
+    setRedeemShares("");
+    setSelectedChain("");
+    setApproveHash("");
+
+    console.log('Redeem request successful:', hash, 'Chain:', chainId);
+  };
+
+  const handleRedeemRequestError: SendTransactionButtonProps["onError"] = (error) => {
+    const chainId = parseInt(selectedChain || HUB_CHAIN_ID.toString());
+
+    setError(`Redeem request failed: ${error.message}`);
+    setCurrentStep('idle');
+
+    const redeemType = isRedeemOnSpoke ? "Async Redeem Request" : "Vault Redeem";
+
+    toast.error(`${redeemType} Failed`, {
+      description: `Transaction failed on ${getChainName(chainId)}: ${error.message}`,
+      action: {
+        label: "Retry",
+        onClick: () => handleReset()
+      },
+      duration: Infinity,
+    });
+
+    console.error('Redeem request failed:', error);
+  };
+
+  // Legacy handleRedeem is replaced by the new async flow
+  // The UI now handles approve -> request redeem in two steps
 
   if (!evmAddress) {
     return (
@@ -388,7 +586,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
               Sell
             </TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="buy" className="space-y-4">
             <div className="space-y-4">
               <div>
@@ -403,9 +601,9 @@ export default function TradingCard({ vault }: TradingCardProps) {
                 {vault.baseAsset.isUSDC && usdcBalance && (
                   <div className="mt-2 text-sm text-muted-foreground">
                     Balance: {usdcBalance.formatted} USDC
-                    <Button 
-                      variant="link" 
-                      size="sm" 
+                    <Button
+                      variant="link"
+                      size="sm"
                       className="h-auto p-0 ml-2 text-xs"
                       onClick={() => setDepositAmount(usdcBalance.balance)}
                     >
@@ -479,7 +677,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
                       1. Approve USDC {isCrossChain ? '(Cross-chain)' : ''}
                     </SendTransactionButton>
                   )}
-                  
+
                   {currentStep === 'deposit' && depositTransaction && (
                     <SendTransactionButton
                       account={evmAddress}
@@ -500,7 +698,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
                   )}
                 </div>
               ) : (
-                <Button 
+                <Button
                   className="w-full bg-green-500 hover:bg-green-600"
                   disabled={true}
                 >
@@ -509,7 +707,7 @@ export default function TradingCard({ vault }: TradingCardProps) {
               )}
             </div>
           </TabsContent>
-          
+
           <TabsContent value="sell" className="space-y-4">
             <div className="space-y-4">
               <div>
@@ -521,6 +719,19 @@ export default function TradingCard({ vault }: TradingCardProps) {
                   value={redeemShares}
                   onChange={(e) => setRedeemShares(e.target.value)}
                 />
+                {shareBalance && (
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    Balance: {shareBalance.formatted} Shares
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 ml-2 text-xs"
+                      onClick={() => setRedeemShares(shareBalance.balance)}
+                    >
+                      Max
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -544,24 +755,62 @@ export default function TradingCard({ vault }: TradingCardProps) {
                 </Select>
               </div>
 
-              <Alert>
-                <AlertDescription>
-                  Redemptions are processed in two steps: Request → Claim
-                </AlertDescription>
-              </Alert>
+              {isRedeemOnSpoke && (
+                <Alert>
+                  <AlertDescription>
+                    Cross-chain redemptions use async processing: Your shares will be burned on {getChainName(parseInt(selectedChain || "0"))} and USDC will be claimable on Base after LayerZero message confirmation (~5-15 minutes).
+                  </AlertDescription>
+                </Alert>
+              )}
 
-              <div className="grid grid-cols-2 gap-2">
-                <Button 
-                  onClick={handleRedeem}
-                  variant="destructive"
-                  disabled={!redeemShares || !selectedChain}
+              {evmAddress && redeemShares && selectedChain ? (
+                <div className="space-y-2">
+                  {currentStep === 'idle' && (
+                    <SendTransactionButton
+                      account={evmAddress}
+                      network={getNetworkName(parseInt(selectedChain))}
+                      transaction={redeemApproveTransaction!}
+                      onSuccess={handleRedeemApproveSuccess}
+                      onError={handleRedeemApproveError}
+                      onPending={() => {
+                        toast.loading("Approving Shares...", {
+                          description: "Please confirm the transaction in your wallet",
+                          duration: Infinity,
+                        });
+                      }}
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded-lg"
+                    >
+                      1. Approve Shares {isRedeemOnSpoke ? '(Cross-chain)' : ''}
+                    </SendTransactionButton>
+                  )}
+
+                  {currentStep === 'redeem-request' && redeemRequestTransaction && (
+                    <SendTransactionButton
+                      account={evmAddress}
+                      network={getNetworkName(parseInt(selectedChain))}
+                      transaction={redeemRequestTransaction}
+                      onSuccess={handleRedeemRequestSuccess}
+                      onError={handleRedeemRequestError}
+                      onPending={() => {
+                        toast.loading(isRedeemOnSpoke ? "Processing Async Redeem Request..." : "Processing Redeem...", {
+                          description: `Please confirm the ${isRedeemOnSpoke ? 'cross-chain redeem request via LayerZero' : 'vault redeem'} transaction in your wallet`,
+                          duration: Infinity,
+                        });
+                      }}
+                      className="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg"
+                    >
+                      2. {isRedeemOnSpoke ? 'Request Async Redeem' : 'Redeem from Vault'}
+                    </SendTransactionButton>
+                  )}
+                </div>
+              ) : (
+                <Button
+                  className="w-full bg-red-500 hover:bg-red-600"
+                  disabled={true}
                 >
-                  Request Redeem
+                  Enter shares amount and select chain to continue
                 </Button>
-                <Button variant="outline" disabled>
-                  Claim
-                </Button>
-              </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>
