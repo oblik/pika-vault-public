@@ -268,6 +268,6 @@ Notes
   - CCTP Bridger (Arb): `0x81A7A4Ece4D161e720ec602Ad152a7026B82448b`
 
 - Ethereum Sepolia (spoke)
-  - Share OFT (MyShareOFT): `0xACF7C2898bF9397AE1453aB98400763FeA2296A3` (current Spoke expects this)
-  - SpokeRedeemOApp: `0xEB2b3Ce4ff766d1f1032E40576e2298b0eE014Ab` (latest)
+  - Share OFT (MyShareOFT): `0x26FAEF8F47277cbD719e17732CA60295e434378e`
+  - SpokeRedeemOApp: `0x0935b69d41072e095db332cb97Ff7c2bF0679CDb`
   - Note: If you deploy a new Share OFT, also redeploy SpokeRedeemOApp pointing to it and re‑wire hub peer

@@ -122,14 +122,25 @@ contract UserFlows is Script {
     address spoke    = vm.envAddress("SPOKE_REDEEM_OAPP_SEPOLIA");
     address shareOFT = address(SpokeRedeemOApp(spoke).shareOFT());
     address controller = vm.envAddress("CONTROLLER_ADDRESS");
-    // Quote fee from endpoint with minimal executor options
+    // Debug context
+    uint256 bal = IERC20(shareOFT).balanceOf(sender);
+    uint256 allowanceBefore = IERC20(shareOFT).allowance(sender, spoke);
+    console2.log("Spoke:", spoke);
+    console2.log("shareOFT (from Spoke):", shareOFT);
+    console2.log("sender:", sender);
+    console2.log("balance(sender):", bal);
+    console2.log("allowance(sender->Spoke) before:", allowanceBefore);
+
+    // Quote fee from endpoint using Spoke's default executor options
     address lzEndpoint = vm.envAddress("LZ_ENDPOINT_SEPOLIA");
     uint32 hubEid = uint32(vm.envUint("LZ_EID_BASE_SEPOLIA"));
+    uint128 lzGas = SpokeRedeemOApp(spoke).lzReceiveGas();
+    uint128 lzVal = SpokeRedeemOApp(spoke).lzReceiveValue();
     bytes memory payload = abi.encodePacked(
       bytes1(AsyncOps.OP_REQUEST_REDEEM),
       AsyncCodec.encRequest(controller, sender, shares)
     );
-    bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
+    bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(lzGas, lzVal);
     MessagingFee memory fee = ILayerZeroEndpointV2(lzEndpoint).quote(
       MessagingParams({
         dstEid: hubEid,
@@ -140,10 +151,9 @@ contract UserFlows is Script {
       }),
       spoke
     );
-    uint256 lzFeeWei = fee.nativeFee;
+    uint256 lzFeeWei = fee.nativeFee + (fee.nativeFee / 20); // +5% buffer
 
     // Safety checks: ensure the token matches and you have balance
-    uint256 bal = IERC20(shareOFT).balanceOf(sender);
     require(bal >= shares, "insufficient spoke share balance");
 
     vm.startBroadcast(pk);
@@ -162,18 +172,24 @@ contract UserFlows is Script {
     address shareOFT = address(SpokeRedeemOApp(spoke).shareOFT());
     address controller = vm.envAddress("CONTROLLER_ADDRESS");
 
-    // Quote fee from endpoint with exact payload
+    // Quote fee from endpoint with exact payload and Spoke's executor options
     address lzEndpoint = vm.envAddress("LZ_ENDPOINT_SEPOLIA");
     uint32 hubEid = uint32(vm.envUint("LZ_EID_BASE_SEPOLIA"));
+    uint128 lzGas = SpokeRedeemOApp(spoke).lzReceiveGas();
+    uint128 lzVal = SpokeRedeemOApp(spoke).lzReceiveValue();
 
     uint256 shares = IERC20(shareOFT).balanceOf(sender);
+    console2.log("Spoke:", spoke);
+    console2.log("shareOFT (from Spoke):", shareOFT);
+    console2.log("sender:", sender);
+    console2.log("balance(sender):", shares);
     require(shares > 0, "no spoke share balance");
 
     bytes memory payload = abi.encodePacked(
       bytes1(AsyncOps.OP_REQUEST_REDEEM),
       AsyncCodec.encRequest(controller, sender, shares)
     );
-    bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
+    bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(lzGas, lzVal);
     MessagingFee memory fee = ILayerZeroEndpointV2(lzEndpoint).quote(
       MessagingParams({
         dstEid: hubEid,
@@ -184,9 +200,10 @@ contract UserFlows is Script {
       }),
       spoke
     );
-    uint256 lzFeeWei = fee.nativeFee;
+    uint256 lzFeeWei = fee.nativeFee + (fee.nativeFee / 20); // +5% buffer
 
     vm.startBroadcast(pk);
+    console2.log("Approving shares:", shares);
     IERC20(shareOFT).approve(spoke, shares);
     SpokeRedeemOApp(spoke).requestRedeemOnSpoke{value: lzFeeWei}(controller, shares);
     vm.stopBroadcast();
@@ -204,9 +221,11 @@ contract UserFlows is Script {
     address mintRecipient = vm.envAddress("DEST_TREASURY");
     uint256 maxFee = vm.envUint("CCTP_MAX_FEE");
     uint32 minFinality = uint32(vm.envUint("CCTP_MIN_FINALITY"));
-    // Quote fee from endpoint for this message size
+    // Quote fee from endpoint for this message size using Spoke's executor options
     address lzEndpoint = vm.envAddress("LZ_ENDPOINT_SEPOLIA");
     uint32 hubEid = uint32(vm.envUint("LZ_EID_BASE_SEPOLIA"));
+    uint128 lzGas = SpokeRedeemOApp(spoke).lzReceiveGas();
+    uint128 lzVal = SpokeRedeemOApp(spoke).lzReceiveValue();
     // exact payload for claim via CCTP
     bytes memory payload = abi.encodePacked(
       bytes1(AsyncOps.OP_CLAIM_SEND_USDC_CCTP),
@@ -222,7 +241,7 @@ contract UserFlows is Script {
         minAssets
       )
     );
-    bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(300_000, 0);
+    bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(lzGas, lzVal);
     MessagingFee memory fee = ILayerZeroEndpointV2(lzEndpoint).quote(
       MessagingParams({
         dstEid: hubEid,
@@ -233,7 +252,7 @@ contract UserFlows is Script {
       }),
       spoke
     );
-    uint256 lzFeeWei = fee.nativeFee;
+    uint256 lzFeeWei = fee.nativeFee + (fee.nativeFee / 20); // +5% buffer
 
     vm.startBroadcast(pk);
     SpokeRedeemOApp(spoke).claimSendUsdcFast{value: lzFeeWei}(
@@ -259,9 +278,11 @@ contract UserFlows is Script {
     address spoke = vm.envAddress("SPOKE_REDEEM_OAPP_SEPOLIA");
     uint256 maxFee = vm.envUint("CCTP_MAX_FEE");
     uint32 minFinality = uint32(vm.envUint("CCTP_MIN_FINALITY"));
-    // Quote fee from endpoint
+    // Quote fee from endpoint using Spoke's executor options
     address lzEndpoint = vm.envAddress("LZ_ENDPOINT_SEPOLIA");
     uint32 hubEid = uint32(vm.envUint("LZ_EID_BASE_SEPOLIA"));
+    uint128 lzGas = SpokeRedeemOApp(spoke).lzReceiveGas();
+    uint128 lzVal = SpokeRedeemOApp(spoke).lzReceiveValue();
     // exact payload for deposit via CCTP
     bytes memory payload = abi.encodePacked(
       bytes1(AsyncOps.OP_DEPOSIT_USDC_CCTP),
@@ -276,7 +297,7 @@ contract UserFlows is Script {
         hex""
       )
     );
-    bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
+    bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(lzGas, lzVal);
     MessagingFee memory fee = ILayerZeroEndpointV2(lzEndpoint).quote(
       MessagingParams({
         dstEid: hubEid,
@@ -287,7 +308,7 @@ contract UserFlows is Script {
       }),
       spoke
     );
-    uint256 lzFeeWei = fee.nativeFee;
+    uint256 lzFeeWei = fee.nativeFee + (fee.nativeFee / 20); // +5% buffer
 
     vm.startBroadcast(pk);
     SpokeRedeemOApp(spoke).depositUsdcFast{value: lzFeeWei}(
