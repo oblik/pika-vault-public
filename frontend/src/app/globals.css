@@ -160,3 +160,32 @@ body::before {
 .pika-bg-card-hover { background-color: hsl(var(--accent)); }
 .pika-border-primary { border-color: hsl(var(--border)); }
 .pika-border-accent { border-color: hsl(var(--primary)); }
+
+/* Fix Coinbase CDP modal transparency */
+[data-cdp-modal] {
+  background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+}
+
+[data-cdp-modal] * {
+  background-color: transparent !important;
+}
+
+[data-cdp-modal-backdrop] {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+}
+
+/* Fix any Coinbase modal or overlay elements */
+.cdp-modal,
+.cdp-overlay,
+[data-radix-portal] [role="dialog"],
+[data-radix-portal] [role="alertdialog"] {
+  background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Ensure modal backdrops are visible */
+[data-radix-portal] [data-state="open"] {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+}
