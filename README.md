@@ -2,8 +2,9 @@
 
 An omnichain ERC‑4626 vault with sync deposits, async redemptions, native USDC bridging (CCTP v2), and cross‑chain NAV broadcasting (CCIP). Deposit anywhere, queue redemptions asynchronously, and receive native USDC on a destination chain while control/state (NAV) is propagated separately.
 
-[![Watch the video](https://img.youtube.com/vi/5o7D5INkY30/maxresdefault.jpg)](https://www.youtube.com/watch?v=5o7D5INkY30)
+[![Watch the video](https://img.youtube.com/vi/5o7D5INkY30/maxresdefault.jpg)](https://youtu.be/5o7D5INkY30)
 
+<iframe width="560" height="315" src="https://www.youtube.com/embed/5o7D5INkY30" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 
 
 
