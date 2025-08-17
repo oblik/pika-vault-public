@@ -8,6 +8,7 @@ import {SpokeRedeemOApp} from "../contracts/async/SpokeRedeemOApp.sol";
 import {ILayerZeroEndpointV2, MessagingParams, MessagingFee} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 import { OptionsBuilder } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 import { IOFT, SendParam } from "@layerzerolabs/oft-evm/contracts/interfaces/IOFT.sol";
+import { AsyncOps, AsyncCodec } from "../contracts/async/AsyncCodec.sol";
 
 // minimal interface to wire OApp peers
 interface IOAppPeer { function setPeer(uint32 eid, bytes32 peer) external; }
@@ -117,13 +118,61 @@ contract UserFlows is Script {
   // Burn spoke shares and send OP_REQUEST_REDEEM to hub
   function sepolia_requestRedeem(uint256 shares) external {
     uint256 pk = vm.envUint("USER_PK");
-    address shareOFT = vm.envAddress("SHARE_OFT_SEPOLIA");
+    address sender = vm.addr(pk);
     address spoke    = vm.envAddress("SPOKE_REDEEM_OAPP_SEPOLIA");
+    address shareOFT = address(SpokeRedeemOApp(spoke).shareOFT());
     address controller = vm.envAddress("CONTROLLER_ADDRESS");
     // Quote fee from endpoint with minimal executor options
     address lzEndpoint = vm.envAddress("LZ_ENDPOINT_SEPOLIA");
     uint32 hubEid = uint32(vm.envUint("LZ_EID_BASE_SEPOLIA"));
-    bytes memory payload = abi.encodePacked(bytes1(uint8(0xA1)), bytes("dummy"));
+    bytes memory payload = abi.encodePacked(
+      bytes1(AsyncOps.OP_REQUEST_REDEEM),
+      AsyncCodec.encRequest(controller, sender, shares)
+    );
+    bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
+    MessagingFee memory fee = ILayerZeroEndpointV2(lzEndpoint).quote(
+      MessagingParams({
+        dstEid: hubEid,
+        receiver: bytes32(uint256(uint160(vm.envAddress("ASYNC_COMPOSER_HUB_BASE")))) ,
+        message: payload,
+        options: options,
+        payInLzToken: false
+      }),
+      spoke
+    );
+    uint256 lzFeeWei = fee.nativeFee;
+
+    // Safety checks: ensure the token matches and you have balance
+    uint256 bal = IERC20(shareOFT).balanceOf(sender);
+    require(bal >= shares, "insufficient spoke share balance");
+
+    vm.startBroadcast(pk);
+    IERC20(shareOFT).approve(spoke, shares);
+    SpokeRedeemOApp(spoke).requestRedeemOnSpoke{value: lzFeeWei}(controller, shares);
+    vm.stopBroadcast();
+
+    console2.log("Requested async redeem of %s shares on Sepolia", shares);
+  }
+
+  // Burn ALL available spoke-side shares and request redeem
+  function sepolia_requestRedeemAll() external {
+    uint256 pk = vm.envUint("USER_PK");
+    address sender = vm.addr(pk);
+    address spoke    = vm.envAddress("SPOKE_REDEEM_OAPP_SEPOLIA");
+    address shareOFT = address(SpokeRedeemOApp(spoke).shareOFT());
+    address controller = vm.envAddress("CONTROLLER_ADDRESS");
+
+    // Quote fee from endpoint with exact payload
+    address lzEndpoint = vm.envAddress("LZ_ENDPOINT_SEPOLIA");
+    uint32 hubEid = uint32(vm.envUint("LZ_EID_BASE_SEPOLIA"));
+
+    uint256 shares = IERC20(shareOFT).balanceOf(sender);
+    require(shares > 0, "no spoke share balance");
+
+    bytes memory payload = abi.encodePacked(
+      bytes1(AsyncOps.OP_REQUEST_REDEEM),
+      AsyncCodec.encRequest(controller, sender, shares)
+    );
     bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
     MessagingFee memory fee = ILayerZeroEndpointV2(lzEndpoint).quote(
       MessagingParams({
@@ -142,7 +191,7 @@ contract UserFlows is Script {
     SpokeRedeemOApp(spoke).requestRedeemOnSpoke{value: lzFeeWei}(controller, shares);
     vm.stopBroadcast();
 
-    console2.log("Requested async redeem of %s shares on Sepolia", shares);
+    console2.log("Requested async redeem of %s shares on Sepolia (all)", shares);
   }
 
   // Ask hub to claim and bridge underlying via CCTP Fast
@@ -158,8 +207,21 @@ contract UserFlows is Script {
     // Quote fee from endpoint for this message size
     address lzEndpoint = vm.envAddress("LZ_ENDPOINT_SEPOLIA");
     uint32 hubEid = uint32(vm.envUint("LZ_EID_BASE_SEPOLIA"));
-    // approximate payload size with the same enc as production (shares etc.) only affects size
-    bytes memory payload = abi.encodePacked(bytes1(uint8(0xA3)), bytes(new bytes(128)));
+    // exact payload for claim via CCTP
+    bytes memory payload = abi.encodePacked(
+      bytes1(AsyncOps.OP_CLAIM_SEND_USDC_CCTP),
+      AsyncCodec.encClaimCCTP(
+        controller,
+        mintRecipient,
+        shares,
+        destDomain,
+        maxFee,
+        minFinality,
+        address(0),
+        hex"",
+        minAssets
+      )
+    );
     bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(300_000, 0);
     MessagingFee memory fee = ILayerZeroEndpointV2(lzEndpoint).quote(
       MessagingParams({
@@ -193,13 +255,27 @@ contract UserFlows is Script {
   // Deposit via CCTP Fast from Sepolia to Base (mint on Base, deposit, route shares via OFT per hookData)
   function sepolia_depositUsdcFast(uint256 amountAssets, uint32 destDomain, address depositReceiver) external {
     uint256 pk = vm.envUint("USER_PK");
+    address sender = vm.addr(pk);
     address spoke = vm.envAddress("SPOKE_REDEEM_OAPP_SEPOLIA");
     uint256 maxFee = vm.envUint("CCTP_MAX_FEE");
     uint32 minFinality = uint32(vm.envUint("CCTP_MIN_FINALITY"));
     // Quote fee from endpoint
     address lzEndpoint = vm.envAddress("LZ_ENDPOINT_SEPOLIA");
     uint32 hubEid = uint32(vm.envUint("LZ_EID_BASE_SEPOLIA"));
-    bytes memory payload = abi.encodePacked(bytes1(uint8(0xA4)), bytes(new bytes(96)));
+    // exact payload for deposit via CCTP
+    bytes memory payload = abi.encodePacked(
+      bytes1(AsyncOps.OP_DEPOSIT_USDC_CCTP),
+      AsyncCodec.encDepositCCTP(
+        sender,
+        amountAssets,
+        destDomain,
+        depositReceiver,
+        maxFee,
+        minFinality,
+        address(0),
+        hex""
+      )
+    );
     bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
     MessagingFee memory fee = ILayerZeroEndpointV2(lzEndpoint).quote(
       MessagingParams({

@@ -155,12 +155,12 @@ CCIP_ROUTER_ARB_SEPOLIA=
 CCIP_BASE_SEPOLIA_SELECTOR=
 
 # CCTP v2
-CCTP_TOKEN_MESSENGER_V2_ARB_SEPOLIA=
-USDC_ARB_SEPOLIA=
-CCTP_DEST_DOMAIN_BASE=   # e.g. 6 for Base
-DEST_TREASURY_BASE=
+CCTP_TOKEN_MESSENGER_V2_BASE=
+USDC_BASE=
+CCTP_DOMAIN_DEST=
+DEST_TREASURY=
 CCTP_MAX_FEE=0
-CCTP_MIN_FINALITY=2000   # 2000 standard, 1000 fast
+CCTP_MIN_FINALITY=1000
 
 # Demo values
 NAV_PUSHER_ARB=
@@ -181,6 +181,20 @@ DEPLOYER_PK=
   - Deploy `AsyncComposerOApp` (hub) + `SpokeRedeemOApp` (spoke).
   - `setPeer`/`_setPeer`, configure EIDs, and whitelist operators.
   - Smoke test `REQUEST_REDEEM` and `CLAIM_SEND_ASSETS` with small amounts.
+
+- User flows (scripts)
+  - Set operator (Base): `script/09_UserFlows.s.sol:UserFlows.base_setOperator()`
+  - Deposit (Base): `script/09_UserFlows.s.sol:UserFlows.base_deposit(amountAssets)`
+  - Wire share peers (Base→Sepolia, Sepolia→Base):
+    - `script/09_UserFlows.s.sol:UserFlows.base_setSharePeerToSepolia()`
+    - `script/09_UserFlows.s.sol:UserFlows.sepolia_setSharePeerToBase()`
+  - Send shares to Sepolia: `script/09_UserFlows.s.sol:UserFlows.base_sendSharesToSepolia(shares,toSepolia)`
+  - Request redeem (Sepolia):
+    - Fixed amount: `script/09_UserFlows.s.sol:UserFlows.sepolia_requestRedeem(shares)`
+    - All balance: `script/09_UserFlows.s.sol:UserFlows.sepolia_requestRedeemAll()`
+  - Mark claimable (Base): `script/09_UserFlows.s.sol:UserFlows.base_markClaimable(shares)`
+  - Claim via USDC Fast (Sepolia): `script/09_UserFlows.s.sol:UserFlows.sepolia_claimUsdcFast(shares,minAssets)`
+  - Deposit via USDC Fast (Sepolia): `script/09_UserFlows.s.sol:UserFlows.sepolia_depositUsdcFast(amountAssets,destDomain,depositReceiver)`
 
 ## Security & invariants
 - Only trusted OApp peers trigger `_lzReceive` handlers.
@@ -254,5 +268,6 @@ Notes
   - CCTP Bridger (Arb): `0x81A7A4Ece4D161e720ec602Ad152a7026B82448b`
 
 - Ethereum Sepolia (spoke)
-  - Share OFT (MyShareOFT): `0xACF7C2898bF9397AE1453aB98400763FeA2296A3`
-  - SpokeRedeemOApp: `0xBb05C630486668cC0069Fd6b40fCad8015E13C1e`
+  - Share OFT (MyShareOFT): `0xACF7C2898bF9397AE1453aB98400763FeA2296A3` (current Spoke expects this)
+  - SpokeRedeemOApp: `0xEB2b3Ce4ff766d1f1032E40576e2298b0eE014Ab` (latest)
+  - Note: If you deploy a new Share OFT, also redeploy SpokeRedeemOApp pointing to it and re‑wire hub peer

@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { OFT } from "@layerzerolabs/oft-evm/contracts/OFT.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /**
  * @title MyShareOFT
@@ -35,5 +36,16 @@ contract MyShareOFT is OFT {
         // Share tokens should only be minted by the vault contract during deposits to maintain
         // the correct relationship between shares and underlying assets
         // _mint(msg.sender, 1 ether); // ONLY uncomment for testing UI/integration, never in production
+    }
+
+    /// @notice Burns tokens from the caller
+    function burn(uint256 amount) external {
+        _burn(msg.sender, amount);
+    }
+
+    /// @notice Burns tokens from `from` using allowance, compatible with SpokeRedeemOApp
+    function burnFrom(address from, uint256 amount) external {
+        _spendAllowance(from, msg.sender, amount);
+        _burn(from, amount);
     }
 }
